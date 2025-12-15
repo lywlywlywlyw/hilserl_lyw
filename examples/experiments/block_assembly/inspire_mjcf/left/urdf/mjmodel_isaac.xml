@@ -1,0 +1,332 @@
+<mujoco model="inspire_hand_l">
+  <compiler angle="radian" meshdir="meshes"/>
+  <!-- <statistic meansize="0.0283996" extent="0.249469" center="-0.076948 0.0118984 0.248973"/> -->
+  <statistic meansize="0.119253" extent="0.945417" center="-2.961e-06 0.00561221 0.418652"/>
+  <visual>
+      <map fogstart="3" fogend="5" force="0.1"></map>
+      <quality shadowsize="4096"></quality>
+  </visual>
+  <option integrator="implicitfast"/>
+  <default>
+    <default class="base">
+        <joint axis="0 0 1" range="-0.47 0.47"/>
+        <position ctrlrange="-0.47 0.47"/>
+    </default>
+    <default class="proximal">
+      <joint range="-0.196 1.61"/>
+      <position ctrlrange="-0.196 1.61"/>
+    </default>
+    <default class="medial">
+      <joint range="-0.174 1.709"/>
+      <position ctrlrange="-0.174 1.709"/>
+    </default>
+    <default class="distal">
+      <joint range="-0.227 1.618"/>
+      <position ctrlrange="-0.227 1.618"/>
+    </default>
+    <default class="thumb_base">
+        <joint range="0.263 1.396"/>
+        <position ctrlrange="0 3.14" kp="0.5"/>
+    </default>
+    <default class="left_hand">
+      <joint limited="true" damping="0.05" armature="0.0002" frictionloss="0.01"/>
+      <general ctrllimited="true" forcelimited="true"></general>
+      <geom friction="1 0.005 0.001" condim="3" margin="0.0005" contype="1" conaffinity="1"></geom>
+    </default>
+
+    <default class="robot1:D_Vizual">
+        <geom material="robot1:MatViz" contype="0" conaffinity="0" group="1" type="mesh"></geom>
+    </default>
+    <default class="robot1:DC_Hand">
+        <geom material="robot1:MatColl" contype="1" conaffinity="0" group="4"></geom>
+    </default>
+
+    <default class="ur5e">
+      <material specular="0.5" shininess="0.25"/>
+      <joint axis="0 1 0" range="-6.28319 6.28319" armature="0.1"/>
+      <general gaintype="fixed" biastype="affine" ctrlrange="-6.2831 6.2831" gainprm="2000" biasprm="0 -2000 -400"
+        forcerange="-150 150"/>
+      <default class="size3">
+        <default class="size3_limited">
+          <joint range="-3.1415 3.1415"/>
+          <general ctrlrange="-3.1415 3.1415"/>
+        </default>
+      </default>
+      <default class="size1">
+        <general gainprm="500" biasprm="0 -500 -100" forcerange="-28 28"/>
+      </default>
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2"/>
+      </default>
+      <default class="collision">
+        <geom type="capsule" group="3" contype="1"/>
+        <default class="eef_collision">
+          <geom type="cylinder"/>
+        </default>
+      </default>
+      <site size="0.001" rgba="0.5 0.5 0.5 0.3" group="4"/>
+    </default>
+  </default>
+
+  <asset>
+    <material name="robot1:MatViz" specular="0.75" shininess="0.1" reflectance="0.5" rgba="0.93 0.93 0.93 1"></material>
+    <material name="robot1:MatColl" specular="1" shininess="0.3" reflectance="0.5" rgba="0.4 0.5 0.6 1"></material>
+    <material class="ur5e" name="black" rgba="0.033 0.033 0.033 1"/>
+    <material class="ur5e" name="jointgray" rgba="0.278 0.278 0.278 1"/>
+    <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
+    <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
+    <mesh name="L_hand_base_link" file="L_hand_base_link.STL"/>
+    <mesh name="L_thumb_proximal_base" file="L_thumb_proximal_base.STL"/>
+    <mesh name="L_thumb_proximal" file="L_thumb_proximal.STL"/>
+    <mesh name="L_thumb_intermediate" file="L_thumb_intermediate.STL"/>
+    <mesh name="L_thumb_distal" file="L_thumb_distal.STL"/>
+    <mesh name="L_index_proximal" file="L_index_proximal.STL"/>
+    <mesh name="L_index_distal" file="L_index_distal.STL"/>
+    <mesh name="L_middle_proximal" file="L_middle_proximal.STL"/>
+    <mesh name="L_middle_distal" file="L_middle_distal.STL"/>
+    <mesh name="L_ring_proximal" file="L_ring_proximal.STL"/>
+    <mesh name="L_ring_distal" file="L_ring_distal.STL"/>
+    <mesh name="L_pinky_proximal" file="L_pinky_proximal.STL"/>
+    <mesh name="L_pinky_distal" file="L_pinky_distal.STL"/>
+    <mesh name="base_0" file="base_0.obj"/>
+    <mesh name="base_1" file="base_1.obj"/>
+    <mesh name="shoulder_0" file="shoulder_0.obj"/>
+    <mesh name="shoulder_1" file="shoulder_1.obj"/>
+    <mesh name="shoulder_2" file="shoulder_2.obj"/>
+    <mesh name="upperarm_0" file="upperarm_0.obj"/>
+    <mesh name="upperarm_1" file="upperarm_1.obj"/>
+    <mesh name="upperarm_2" file="upperarm_2.obj"/>
+    <mesh name="upperarm_3" file="upperarm_3.obj"/>
+    <mesh name="forearm_0" file="forearm_0.obj"/>
+    <mesh name="forearm_1" file="forearm_1.obj"/>
+    <mesh name="forearm_2" file="forearm_2.obj"/>
+    <mesh name="forearm_3" file="forearm_3.obj"/>
+    <mesh name="wrist1_0" file="wrist1_0.obj"/>
+    <mesh name="wrist1_1" file="wrist1_1.obj"/>
+    <mesh name="wrist1_2" file="wrist1_2.obj"/>
+    <mesh name="wrist2_0" file="wrist2_0.obj"/>
+    <mesh name="wrist2_1" file="wrist2_1.obj"/>
+    <mesh name="wrist2_2" file="wrist2_2.obj"/>
+    <mesh name="wrist3" file="wrist3.obj"/>
+  </asset>
+
+  <worldbody>
+    <light name="spotlight" mode="targetbodycom" target="wrist_2_link" pos="0 -1 2"/>
+    <body name="base_L" quat="1 0 0 1" childclass="ur5e">
+      <inertial mass="4.0" pos="0 0 0" diaginertia="0.00443333156 0.00443333156 0.0072"/>
+      <!-- <geom mesh="base_0" material="black" class="visual"/>
+      <geom mesh="base_1" material="jointgray" class="visual"/> -->
+      <body name="shoulder_link" pos="0 0 0.107">
+      <!-- <body name="shoulder_link" pos="0 0 0.064"> -->
+        <inertial mass="3.7" pos="0 0 0" diaginertia="0.0102675 0.0102675 0.00666"/>
+        <joint name="shoulder_pan_joint" class="size3" axis="0 0 1" range="-6.28319 6.28319" limited="true"/>
+        <!--11 <joint name="shoulder_pan_joint" class="size3" axis="0 0 1" range="1.57 1.571" limited="true"/> -->
+        <!-- <joint name="shoulder_pan_joint" class="size3" axis="0 0 1" range="0 3.14" limited="true"/> -->
+        <geom mesh="shoulder_0" material="urblue" class="visual"/>
+        <geom mesh="shoulder_1" material="black" class="visual"/>
+        <geom mesh="shoulder_2" material="jointgray" class="visual"/>
+        <geom class="collision" size="0.06 0.06" pos="0 0 -0.04"/>
+        <body name="upper_arm_link" pos="0 0.138 0" quat="1 0 1 0">
+          <inertial mass="8.393" pos="0 0 0.2125" diaginertia="0.133886 0.133886 0.0151074"/>
+          <joint name="shoulder_lift_joint" class="size3" range="-6.28319 6.28319"  limited="true"/>
+          <!-- <joint name="shoulder_lift_joint" class="size3" range="-2.2 0"  limited="true"/> -->
+          <!--11 <joint name="shoulder_lift_joint" class="size3" range="-1.571 -1.57" limited="true"/> -->
+          <geom mesh="upperarm_0" material="linkgray" class="visual"/>
+          <geom mesh="upperarm_1" material="black" class="visual"/>
+          <geom mesh="upperarm_2" material="jointgray" class="visual"/>
+          <geom mesh="upperarm_3" material="urblue" class="visual"/>
+          <geom class="collision" pos="0 -0.04 0" quat="1 1 0 0" size="0.06 0.06"/>
+          <geom class="collision" size="0.05 0.2" pos="0 0 0.2"/>
+          <body name="forearm_link" pos="0 -0.131 0.425">
+            <inertial mass="2.275" pos="0 0 0.196" diaginertia="0.0311796 0.0311796 0.004095"/>
+            <joint name="elbow_joint" class="size3_limited" range="-3.14 3.14"  limited="true"/>
+            <!-- <joint name="elbow_joint" class="size3_limited" range="-1.951 -1.95" limited="true"/> -->
+            <!-- 11<joint name="elbow_joint" class="size3_limited" range="-3.14 -1.95" limited="true"/> -->
+            <geom mesh="forearm_0" material="urblue" class="visual"/>
+            <geom mesh="forearm_1" material="linkgray" class="visual"/>
+            <geom mesh="forearm_2" material="black" class="visual"/>
+            <geom mesh="forearm_3" material="jointgray" class="visual"/>
+            <geom class="collision" pos="0 0.08 0" quat="1 1 0 0" size="0.055 0.06"/>
+            <geom class="collision" size="0.038 0.19" pos="0 0 0.2"/>
+            <body name="wrist_1_link" pos="0 0 0.392" quat="1 0 1 0">
+              <inertial mass="1.219" pos="0 0.127 0" diaginertia="0.0025599 0.0025599 0.0021942"/>
+              <joint name="wrist_1_joint" class="size1" range="-6.28319 6.28319"  limited="true"/>
+              <!-- <joint name="wrist_1_joint" class="size1" range="-3.3 -1.5" limited="true"/> -->
+              <!-- 11<joint name="wrist_1_joint" class="size1" range="-4.34 -2.89" limited="true"/> -->
+              <geom mesh="wrist1_0" material="black" class="visual"/>
+              <geom mesh="wrist1_1" material="urblue" class="visual"/>
+              <geom mesh="wrist1_2" material="jointgray" class="visual"/>
+              <geom class="collision" pos="0 0.05 0" quat="1 1 0 0" size="0.04 0.07"/>
+              <body name="wrist_2_link" pos="0 0.127 0">
+                <inertial mass="1.219" pos="0 0 0.1" diaginertia="0.0025599 0.0025599 0.0021942"/>
+                <joint name="wrist_2_joint" axis="0 0 1" class="size1" range="-6.28319 6.28319"  limited="true"/>
+                <!-- 11<joint name="wrist_2_joint" axis="0 0 1" class="size1" range="-1.571 -1.57" limited="true"/> -->
+                <!-- <joint name="wrist_2_joint" axis="0 0 1" class="size1" range="-1.77 -1.37" limited="true"/> -->
+                <!-- <joint name="wrist_2_joint" axis="0 0 1" class="size1" range="-1.77 0" limited="true"/> -->
+                <geom mesh="wrist2_0" material="black" class="visual"/>
+                <geom mesh="wrist2_1" material="urblue" class="visual"/>
+                <geom mesh="wrist2_2" material="jointgray" class="visual"/>
+                <geom class="collision" size="0.04 0.06" pos="0 0 0.04"/>
+                <geom class="collision" pos="0 0.02 0.1" quat="1 1 0 0" size="0.04 0.04"/>
+                <body name="wrist_3_link" pos="0 0 0.1">
+                  <inertial mass="0.1889" pos="0 0.0771683 0" quat="1 0 0 1"
+                    diaginertia="0.000132134 9.90863e-05 9.90863e-05"/>
+                  <joint name="wrist_3_joint" class="size1" range="-6.28319 6.28319" limited="true"/>
+                  <!-- 11<joint name="wrist_3_joint" class="size1" range="0 0.001" limited="true"/> -->
+                  <!-- <joint name="wrist_3_joint" class="size1" range="-3.14 0" limited="true"/> -->
+                  <geom material="linkgray" mesh="wrist3" class="visual"/>
+                  <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
+                  <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
+<!-- euler="3.1415 0 0" -->
+                  <body name="lhand" childclass="left_hand" pos="-0.425 0.505 0.75" quat="4.63267949e-05 9.99999999e-01 0.00000000e+00 0.00000000e+00 ">
+                    <body name="L_hand_base" pos="0.5 0.5 0.5">
+                    <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Base" quat="0.707107 -0.707107 0 0" type="mesh" rgba="1 1 1 1" mesh="L_hand_base_link"/>
+                    <!-- <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Base" quat="0.707107 -0.707107 0 0" type="mesh" rgba="1 1 1 1" mesh="L_hand_base_link"/> -->
+                    <geom class="robot1:DC_Hand" name="robot0:DC_Hand_Base" type="box" pos="-0.075 -0.175 0.255" quat="0.707107 -0.707107 0 0" size="0.04 0.0111 0.05" rgba="0.4 0.5 0.6 0.1"></geom>
+                    </body>    
+                    <body name="L_thumb_proximal_base" pos="0.401367 0.34174 0.73173" quat="-1.81667e-06 -0.996416 1.56498e-07 -0.0845938">
+                      <inertial pos="-0.0048772 0.00668 -0.00044071" quat="0.107679 0.764233 -0.0756348 0.631373" mass="0.0018869" diaginertia="8.66029e-08 6.87331e-08 4.942e-08"/>
+                      <!-- <joint name="L_thumb_MCP_joint1" pos="0 0 0" axis="0 1 0" range="0.3 1.4"/> -->
+                      <joint name="L_thumb_MCP_joint1" pos="0 0 0" axis="0 1 0" range="1.0 1.3"/>
+                      <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Thumb_1" type="mesh" rgba="1 1 1 1" mesh="L_thumb_proximal_base"/>
+                      <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Thumb_1" type="mesh" rgba="1 1 1 1" mesh="L_thumb_proximal_base"/>
+                      <!-- <body name="L_thumb_proximal" pos="-0.0115 0.005 0" quat="0.331531 0.624568 -0.331533 0.62457"> -->
+                      <!-- euler="1.571 -0.606 1.571" -->
+                      <body name="L_thumb_proximal" pos="-0.0115 0.005 0" quat="0.62634845 0.32803037 -0.62648207  0.32803037">
+                        <inertial pos="-3.8578e-05 0.025335 0.0016982" quat="0.754084 0.656775 -0.00128576 0.0014545" mass="0.0066101" diaginertia="2.78701e-06 2.44019e-06 8.64653e-07"/>
+                        <joint name="L_thumb_MCP_joint2" pos="0 0 0" axis="-1 0 0" range="0 0.5"/>
+                        <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Thumb_2" type="mesh" rgba="1 1 1 1" mesh="L_thumb_proximal"/>
+                        <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Thumb_2" type="mesh" rgba="1 1 1 1" mesh="L_thumb_proximal"/>
+                        <body name="L_thumb_intermediate" pos="0 0.055863 -0.0039241" quat="0.999817 0.0191483 0 0">
+                          <inertial pos="-1.7401e-07 0.0072516 0.0064286" quat="0.81744 0.576014 6.61106e-05 -9.38198e-05" mass="0.0037844" diaginertia="4.6532e-07 4.48115e-07 2.45645e-07"/>
+                          <joint name="L_thumb_PIP_joint" pos="0 0 0" axis="-1 0 0" range="0 1"/>
+                          <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Thumb_3" type="mesh" rgba="1 1 1 1" mesh="L_thumb_intermediate"/>
+                          <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Thumb_3" type="mesh" rgba="1 1 1 1" mesh="L_thumb_intermediate"/>
+                          <body name="L_thumb_distal" pos="0 0.022558 0.0020717" quat="0.999983 0.00582097 0 0">
+                            <inertial pos="-3.3076e-06 0.010511 0.00057861" quat="0.781092 0.624411 -0.00196986 0.00144874" mass="0.003344" diaginertia="2.0026e-07 1.95251e-07 8.15962e-08"/>
+                            <joint name="L_thumb_DIP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.2"/>
+                            <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Thumb_4" type="mesh" rgba="1 1 1 1" mesh="L_thumb_distal"/>
+                            <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Thumb_4" type="mesh" rgba="1 1 1 1" mesh="L_thumb_distal"/>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                    <body name="L_index_proximal" pos="0.403586 0.25993 0.74897" quat="0.017316 0.00217951 0.124654 0.992047">
+                      <inertial pos="0.0080456 0.011884 -0.0016957" quat="0.777057 0.62943 1.19165e-05 9.6526e-06" mass="0.0042405" diaginertia="6.9402e-07 6.62906e-07 2.10924e-07"/>
+                      <joint name="L_index_MCP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.7"/>
+                      <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Index_1" type="mesh" rgba="1 1 1 1" mesh="L_index_proximal"/>
+                      <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Index_1" type="mesh" rgba="1 1 1 1" mesh="L_index_proximal"/>
+                      <body name="L_index_distal" pos="0.0016538 0.030445 -0.010275" quat="0.999803 -0.0198727 0 0">
+                        <inertial pos="0.0063917 0.01959 -0.0019564" quat="0.813238 0.581931 0 0" mass="0.0045682" diaginertia="7.8176e-07 7.72431e-07 8.47188e-08"/>
+                        <joint name="L_index_DIP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.6"/>
+                        <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Index_2" type="mesh" rgba="1 1 1 1" mesh="L_index_distal"/>
+                        <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Index_2" type="mesh" rgba="1 1 1 1" mesh="L_index_distal"/>
+                      </body>
+                    </body>
+                    <body name="L_middle_proximal" pos="0.422932 0.25984 0.74897" quat="-4.57949e-07 3.64455e-06 0.124673 0.992198">
+                      <inertial pos="0.0080653 0.011884 -0.0016957" quat="0.777057 0.62943 1.16794e-05 9.46051e-06" mass="0.0042405" diaginertia="6.9402e-07 6.62906e-07 2.10924e-07"/>
+                      <joint name="L_middle_MCP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.7"/>
+                      <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Middle_1" type="mesh" rgba="1 1 1 1" mesh="L_middle_proximal"/>
+                      <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Middle_1" type="mesh" rgba="1 1 1 1" mesh="L_middle_proximal"/>
+                      <body name="L_middle_distal" pos="0.0016698 0.030445 -0.010275" quat="0.999363 -0.0356989 0 0">
+                        <inertial pos="0.0063955 0.020807 -0.0018039" quat="0.807684 0.589615 7.8918e-05 -0.000111289" mass="0.0050397" diaginertia="9.8385e-07 9.73291e-07 9.13995e-08"/>
+                        <joint name="L_middle_DIP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.6"/>
+                        <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Middle_2" type="mesh" rgba="1 1 1 1" mesh="L_middle_distal"/>
+                        <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Middle_2" type="mesh" rgba="1 1 1 1" mesh="L_middle_distal"/>
+                      </body>
+                    </body>
+                    <body name="L_ring_proximal" pos="0.444902 0.26091 0.74897" quat="-0.0259732 -0.00325992 0.12463 0.991858">
+                      <inertial pos="0.010821 0.011884 -0.0016957" quat="0.777057 0.62943 1.13816e-05 9.21931e-06" mass="0.0042405" diaginertia="6.9402e-07 6.62906e-07 2.10924e-07"/>
+                      <joint name="L_ring_MCP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.7"/>
+                      <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Ring_1" type="mesh" rgba="1 1 1 1" mesh="L_ring_proximal"/>
+                      <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Ring_1" type="mesh" rgba="1 1 1 1" mesh="L_ring_proximal"/>
+                      <body name="L_ring_distal" pos="0.0015355 0.030445 -0.010275" quat="0.999803 -0.0198727 0 0">
+                        <inertial pos="0.009285 0.019591 -0.0019565" quat="0.813238 0.581931 0 0" mass="0.0045682" diaginertia="7.8176e-07 7.72431e-07 8.47188e-08"/>
+                        <joint name="L_ring_DIP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.6"/>
+                        <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Ring_2" type="mesh" rgba="1 1 1 1" mesh="L_ring_distal"/>
+                        <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Ring_2" type="mesh" rgba="1 1 1 1" mesh="L_ring_distal"/>
+                      </body>
+                    </body>
+                    <body name="L_pinky_proximal" pos="0.466744 0.26327 0.74897" quat="-0.0519282 -0.00652125 0.124502 0.990838">
+                      <inertial pos="0.013546 0.011884 -0.0016957" quat="0.777057 0.62943 1.15068e-05 9.32075e-06" mass="0.0042405" diaginertia="6.9402e-07 6.62906e-07 2.10924e-07"/>
+                      <joint name="L_pinky_MCP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.7"/>
+                      <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Pinky_1" type="mesh" rgba="1 1 1 1" mesh="L_pinky_proximal"/>
+                      <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Pinky_1" type="mesh" rgba="1 1 1 1" mesh="L_pinky_proximal"/>
+                      <body name="L_pinky_distal" pos="0 0.030445 -0.010275" quat="0.999822 0.0188444 0 0">
+                        <inertial pos="0.013546 0.016245 -0.0022219" quat="0.832929 0.553379 -3.53e-06 -2.34525e-06" mass="0.0036036" diaginertia="4.4881e-07 4.43813e-07 6.57372e-08"/>
+                        <joint name="L_pinky_DIP_joint" pos="0 0 0" axis="-1 0 0" range="0 1.6"/>
+                        <geom class="robot1:D_Vizual" name="robot1:D_Vizual_Pinky_2" type="mesh" rgba="1 1 1 1" mesh="L_pinky_distal"/>
+                        <geom class="robot1:DC_Hand" name="robot1:DC_Hand_Pinky_2" type="mesh" rgba="1 1 1 1" mesh="L_pinky_distal"/>                      
+                      </body>
+                      </body>
+                    </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body> 
+  </worldbody>
+
+
+  <contact>
+    <exclude body1="L_hand_base" body2="L_index_proximal"/>
+    <exclude body1="L_hand_base" body2="L_middle_proximal"/>
+    <exclude body1="L_hand_base" body2="L_ring_proximal"/>
+    <exclude body1="L_hand_base" body2="L_pinky_proximal"/>
+    <exclude body1="L_hand_base" body2="L_thumb_proximal"/>
+    <exclude body1="L_hand_base" body2="L_thumb_proximal_base"/>
+    <exclude body1="L_thumb_proximal_base" body2="L_thumb_proximal"/>
+    <exclude body1="L_thumb_proximal" body2="L_thumb_intermediate"/>
+    <exclude body1="L_thumb_proximal_base" body2="L_thumb_intermediate"/>
+    <exclude body1="L_thumb_intermediate" body2="L_thumb_distal"/>
+  </contact>
+
+
+  <tendon>
+    <fixed name="index_tendon" limited="true" range="-0.001 0.001">
+        <joint joint="L_index_MCP_joint" coef="0.00705"/>
+        <!-- <joint joint="L_index_MCP_joint" coef="0.09"/> -->
+        <!-- <joint joint="L_index_DIP_joint" coef="-0.005" /> -->
+        <joint joint="L_index_DIP_joint" coef="-0.01005" />
+        
+    </fixed>
+    <fixed name="middle_tendon" limited="true" range="-0.001 0.001">
+        <joint joint="L_middle_MCP_joint" coef="0.00705"/>
+        <joint joint="L_middle_DIP_joint" coef="-0.01005" />
+    </fixed>
+    <fixed name="ring_tendon" limited="true" range="-0.001 0.001">
+        <joint joint="L_ring_MCP_joint" coef="0.00705"/>
+        <joint joint="L_ring_DIP_joint" coef="-0.01005" />
+    </fixed>
+    <fixed name="pinky_tendon" limited="true" range="-0.001 0.001">
+        <joint joint="L_pinky_MCP_joint" coef="0.00705"/>
+        <joint joint="L_pinky_DIP_joint" coef="-0.01005" />
+    </fixed>
+
+    <fixed name="thumb_tendon_1" limited="true" range="-0.001 0.001">
+        <joint joint="L_thumb_MCP_joint2" coef="-0.01205"/>
+        <joint joint="L_thumb_PIP_joint" coef="0.00505"/>
+        <joint joint="L_thumb_DIP_joint" coef="0.00305" />
+    </fixed>
+  </tendon>
+
+
+  <actuator>
+    <position name="index_tendon_a_L" joint="L_index_MCP_joint" class="thumb_base"/>
+    <position name="middle_tendon_a_L" joint="L_middle_MCP_joint" class="thumb_base"/>
+    <position name="ring_tendon_a_L" joint="L_ring_MCP_joint" class="thumb_base"/>
+    <position name="pinky_tendon_a_L" joint="L_pinky_MCP_joint" class="thumb_base"/>
+    <position name="thumb_tendon_b_L" joint="L_thumb_MCP_joint2" class="thumb_base"/>
+    <position name="thumb_joint_1_L" joint="L_thumb_MCP_joint1" class="thumb_base"/>
+    <position class="size3" name="shouldeL_pan_L" joint="shouldeL_pan_joint"/>
+    <position class="size3" name="shouldeL_lift_L" joint="shoulder_lift_joint"/>
+    <position class="size3_limited" name="elbow_L" joint="elbow_joint"/>
+    <position class="size1" name="wrist_1_L" joint="wrist_1_joint"/>
+    <position class="size1" name="wrist_2_L" joint="wrist_2_joint"/>
+    <position class="size1" name="wrist_3_L" joint="wrist_3_joint"/>
+
+  </actuator>
+
+</mujoco>
