@@ -16,10 +16,10 @@ from serl_launcher.vision.data_augmentations import batched_random_crop
 from serl_launcher.networks.reward_classifier import create_classifier
 
 from experiments.mappings import CONFIG_MAPPING
-
+import gymnasium as gym
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("exp_name", None, "Name of experiment corresponding to folder.")
+flags.DEFINE_string("exp_name", "blockassembly", "Name of experiment corresponding to folder.")
 flags.DEFINE_integer("num_epochs", 150, "Number of training epochs.")
 flags.DEFINE_integer("batch_size", 256, "Batch size.")
 
@@ -27,14 +27,27 @@ flags.DEFINE_integer("batch_size", 256, "Batch size.")
 def main(_):
     assert FLAGS.exp_name in CONFIG_MAPPING, 'Experiment folder not found.'
     config = CONFIG_MAPPING[FLAGS.exp_name]()
-    env = config.get_environment(fake_env=True, save_video=False, classifier=False)
+    env = config.get_environment(fake_env=True, evaluate=True)
 
     devices = jax.local_devices()
     sharding = jax.sharding.PositionalSharding(devices)
-    
+    temp_obs_space = gym.spaces.Dict({
+        "shelf": gym.spaces.Box(
+            low=0,
+            high=255,
+            shape=(128, 128, 3),
+            dtype=np.uint8
+        ),
+        "ground": gym.spaces.Box(
+            low=0,
+            high=255,
+            shape=(128, 128, 3),
+            dtype=np.uint8
+        ),
+    })
     # Create buffer for positive transitions
     pos_buffer = ReplayBuffer(
-        env.observation_space,
+        temp_obs_space,#env.observation_space,
         env.action_space,
         capacity=20000,
         include_label=True,
@@ -44,8 +57,11 @@ def main(_):
     for path in success_paths:
         success_data = pkl.load(open(path, "rb"))
         for trans in success_data:
-            if "images" in trans['observations'].keys():
-                continue
+            trans["observations"] = trans["observations"]["images"]
+            trans["next_observations"] = trans["next_observations"]["images"]
+
+            # if "images" in trans['observations'].keys():
+            #     continue
             trans["labels"] = 1
             trans['actions'] = env.action_space.sample()
             pos_buffer.insert(trans)
@@ -59,7 +75,7 @@ def main(_):
     
     # Create buffer for negative transitions
     neg_buffer = ReplayBuffer(
-        env.observation_space,
+        temp_obs_space,#env.observation_space,
         env.action_space,
         capacity=50000,
         include_label=True,
@@ -70,8 +86,11 @@ def main(_):
             open(path, "rb")
         )
         for trans in failure_data:
-            if "images" in trans['observations'].keys():
-                continue
+            trans["observations"] = trans["observations"]["images"]
+            trans["next_observations"] = trans["next_observations"]["images"]
+
+            # if "images" in trans['observations'].keys():
+            #     continue
             trans["labels"] = 0
             trans['actions'] = env.action_space.sample()
             neg_buffer.insert(trans)
@@ -103,7 +122,7 @@ def main(_):
             observations = observations.copy(
                 add_or_replace={
                     pixel_key: batched_random_crop(
-                        observations[pixel_key], rng, padding=4, num_batch_dims=2
+                        observations[pixel_key], rng, padding=4, num_batch_dims=1
                     )
                 }
             )

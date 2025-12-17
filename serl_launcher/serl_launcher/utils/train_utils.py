@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
 import wandb
-from flax.core import frozen_dict
+from flax.core import frozen_dict, freeze, unfreeze
 from flax.training import checkpoints
 
 def ask_for_frame(images_dict):    
@@ -142,23 +142,31 @@ def load_resnet10_params(agent, image_keys=("image",), public=True):
         with open(file_path, "rb") as f:
             encoder_params = pkl.load(f)
 
-    param_count = sum(x.size for x in jax.tree_leaves(encoder_params))
+    # 使用推荐的 tree_leaves
+    param_count = sum(x.size for x in jax.tree_util.tree_leaves(encoder_params))
     print(
         f"Loaded {param_count/1e6}M parameters from ResNet-10 pretrained on ImageNet-1K"
     )
 
-    new_params = agent.state.params
+    # 先解冻 FrozenDict
+    new_params = unfreeze(agent.state.params)
 
     for image_key in image_keys:
-        new_encoder_params = new_params["modules_actor"]["encoder"][
-            f"encoder_{image_key}"
-        ]
-        if "pretrained_encoder" in new_encoder_params:
-            new_encoder_params = new_encoder_params["pretrained_encoder"]
-        for k in new_encoder_params:
-            if k in encoder_params:
-                new_encoder_params[k] = encoder_params[k]
-                print(f"replaced {k} in pretrained_encoder")
+        encoder_name = f"encoder_{image_key}"
+        if (
+            "modules_actor" in new_params
+            and "encoder" in new_params["modules_actor"]
+            and encoder_name in new_params["modules_actor"]["encoder"]
+        ):
+            new_encoder_params = new_params["modules_actor"]["encoder"][encoder_name]
+            if "pretrained_encoder" in new_encoder_params:
+                new_encoder_params = new_encoder_params["pretrained_encoder"]
+            for k in list(new_encoder_params.keys()):
+                if k in encoder_params:
+                    new_encoder_params[k] = encoder_params[k]
+                    print(f"replaced {k} in pretrained_encoder ({encoder_name})")
 
+    # 冻回 FrozenDict
+    new_params = freeze(new_params)
     agent = agent.replace(state=agent.state.replace(params=new_params))
     return agent

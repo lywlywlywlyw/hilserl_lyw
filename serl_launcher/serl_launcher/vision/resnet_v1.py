@@ -227,7 +227,7 @@ class ResNetEncoder(nn.Module):
 
         if self.add_spatial_coordinates:
             x = AddSpatialCoordinates(dtype=self.dtype)(x)
-
+        
         conv = partial(
             self.conv,
             use_bias=False,
@@ -256,7 +256,6 @@ class ResNetEncoder(nn.Module):
             padding=[(3, 3), (3, 3)],
             name="conv_init",
         )(x)
-
         x = norm(name="norm_init")(x)
         x = act(x)
         x = nn.max_pool(x, (3, 3), strides=(2, 2), padding="SAME")

@@ -11,7 +11,8 @@ from flax.training import checkpoints
 import os
 import copy
 import pickle as pkl
-from gymnasium.wrappers.record_episode_statistics import RecordEpisodeStatistics
+# from gymnasium.wrappers.record_episode_statistics import RecordEpisodeStatistics
+from gymnasium.wrappers import RecordEpisodeStatistics
 from natsort import natsorted
 
 from serl_launcher.agents.continuous.sac import SACAgent
@@ -33,17 +34,17 @@ from serl_launcher.utils.launcher import (
 from serl_launcher.data.data_store import MemoryEfficientReplayBufferDataStore
 
 from experiments.mappings import CONFIG_MAPPING
-
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("exp_name", None, "Name of experiment corresponding to folder.")
+
+flags.DEFINE_string("exp_name", "blockassembly", "Name of experiment corresponding to folder.")
 flags.DEFINE_integer("seed", 42, "Random seed.")
 flags.DEFINE_boolean("learner", False, "Whether this is a learner.")
 flags.DEFINE_boolean("actor", False, "Whether this is an actor.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
-flags.DEFINE_multi_string("demo_path", None, "Path to the demo data.")
-flags.DEFINE_string("checkpoint_path", None, "Path to save checkpoints.")
-flags.DEFINE_integer("eval_checkpoint_step", 0, "Step to evaluate the checkpoint.")
+flags.DEFINE_multi_string("demo_path", "/home/admin01/lyw_2/hil-serl_original/data/demos/demo3.pkl", "Path to the demo data.")
+flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/checkpoints/20251217_204446", "Path to save checkpoints.")#"/home/admin01/lyw_2/hil-serl_original/checkpoints/"+time.strftime("%Y%m%d_%H%M%S", time.localtime())
+flags.DEFINE_integer("eval_checkpoint_step", 0 ,"Step to evaluate the checkpoint.")
 flags.DEFINE_integer("eval_n_trajs", 0, "Number of trajectories to evaluate.")
 flags.DEFINE_boolean("save_video", False, "Save video.")
 
@@ -369,9 +370,7 @@ def main(_):
 
     assert FLAGS.exp_name in CONFIG_MAPPING, "Experiment folder not found."
     env = config.get_environment(
-        fake_env=FLAGS.learner,
-        save_video=FLAGS.save_video,
-        classifier=True,
+        fake_env=FLAGS.learner, evaluate=(FLAGS.eval_checkpoint_step>0)
     )
     env = RecordEpisodeStatistics(env)
 
@@ -409,7 +408,6 @@ def main(_):
         include_grasp_penalty = True
     else:
         raise NotImplementedError(f"Unknown setup mode: {config.setup_mode}")
-
     # replicate agent across devices
     # need the jnp.array to avoid a bug where device_put doesn't recognize primitives
     agent = jax.device_put(

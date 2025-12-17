@@ -481,16 +481,31 @@ class SACAgent(flax.struct.PyTreeNode):
                 resnetv1_configs,
             )
 
-            pretrained_encoder = resnetv1_configs["resnetv1-10-frozen"](
+            pretrained_encoder0 = resnetv1_configs["resnetv1-10-frozen"](
                 pre_pooling=True,
                 name="pretrained_encoder",
             )
-            encoders = {
+            encoders0 = {
                 image_key: PreTrainedResNetEncoder(
                     pooling_method="spatial_learned_embeddings",
                     num_spatial_blocks=8,
                     bottleneck_dim=256,
-                    pretrained_encoder=pretrained_encoder,
+                    pretrained_encoder=pretrained_encoder0,
+                    name=f"encoder_{image_key}",
+                )
+                for image_key in image_keys
+            }
+
+            pretrained_encoder1 = resnetv1_configs["resnetv1-10-frozen"](
+                pre_pooling=True,
+                name="pretrained_encoder",
+            )
+            encoders1 = {
+                image_key: PreTrainedResNetEncoder(
+                    pooling_method="spatial_learned_embeddings",
+                    num_spatial_blocks=8,
+                    bottleneck_dim=256,
+                    pretrained_encoder=pretrained_encoder1,
                     name=f"encoder_{image_key}",
                 )
                 for image_key in image_keys
@@ -498,16 +513,23 @@ class SACAgent(flax.struct.PyTreeNode):
         else:
             raise NotImplementedError(f"Unknown encoder type: {encoder_type}")
 
-        encoder_def = EncodingWrapper(
-            encoder=encoders,
+        encoder_def0 = EncodingWrapper(
+            encoder=encoders0,
+            use_proprio=use_proprio,
+            enable_stacking=True,
+            image_keys=image_keys,
+        )
+        encoder_def1 = EncodingWrapper(
+            encoder=encoders1,
             use_proprio=use_proprio,
             enable_stacking=True,
             image_keys=image_keys,
         )
 
+
         encoders = {
-            "critic": encoder_def,
-            "actor": encoder_def,
+            "critic": encoder_def0,
+            "actor": encoder_def1,
         }
 
         # Define networks

@@ -55,7 +55,6 @@ class Critic(nn.Module):
             obs_enc = observations
         else:
             obs_enc = self.encoder(observations)
-
         inputs = jnp.concatenate([obs_enc, actions], -1)
         outputs = self.network(inputs, train)
         if self.init_final is not None:

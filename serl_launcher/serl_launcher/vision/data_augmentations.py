@@ -24,7 +24,6 @@ def batched_random_crop(img, rng, *, padding, num_batch_dims: int = 1):
     # Flatten batch dims
     original_shape = img.shape
     img = jnp.reshape(img, (-1, *img.shape[num_batch_dims:]))
-
     rngs = jax.random.split(rng, img.shape[0])
 
     img = jax.vmap(

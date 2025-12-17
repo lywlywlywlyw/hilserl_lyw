@@ -6,7 +6,7 @@ from socket import gethostname
 import absl.flags as flags
 import ml_collections
 import wandb
-
+import jax.numpy as jnp
 
 def _recursive_flatten_dict(d: dict):
     keys, values = [], []
@@ -87,8 +87,27 @@ class WandBLogger(object):
             if isinstance(flag_dict[k], ml_collections.ConfigDict):
                 flag_dict[k] = flag_dict[k].to_dict()
         wandb.config.update(flag_dict)
+    def _to_serializable(self, x):
+        import jax
+        import numpy as np
 
+        if isinstance(x, (jax.Array, np.ndarray)):
+            if x.size == 1:  # 单元素数组
+                return float(x)  # 或 x.item()
+            else:  # 多元素数组
+                return np.array(x).tolist()
+        elif isinstance(x, dict):
+            return {k: self._to_serializable(v) for k, v in x.items()}
+        elif isinstance(x, (list, tuple)):
+            return [self._to_serializable(v) for v in x]
+        else:
+            return x
+
+    # def log(self, data: dict, step: int = None):
+    #     data_flat = _recursive_flatten_dict(data)
+    #     data = {k: v for k, v in zip(*data_flat)}
+    #     wandb.log(data, step=step)
     def log(self, data: dict, step: int = None):
         data_flat = _recursive_flatten_dict(data)
-        data = {k: v for k, v in zip(*data_flat)}
-        wandb.log(data, step=step)
+        data = {k: self._to_serializable(v) for k, v in zip(*data_flat)}
+        wandb.log(data, step=step, commit=True)
