@@ -150,7 +150,6 @@ def load_resnet10_params(agent, image_keys=("image",), public=True):
 
     # 先解冻 FrozenDict
     new_params = unfreeze(agent.state.params)
-
     for image_key in image_keys:
         encoder_name = f"encoder_{image_key}"
         if (

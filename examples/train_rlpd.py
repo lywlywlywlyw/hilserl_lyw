@@ -42,17 +42,23 @@ flags.DEFINE_integer("seed", 42, "Random seed.")
 flags.DEFINE_boolean("learner", False, "Whether this is a learner.")
 flags.DEFINE_boolean("actor", False, "Whether this is an actor.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
-flags.DEFINE_multi_string("demo_path", "/home/admin01/lyw_2/hil-serl_original/data/demos/demo3.pkl", "Path to the demo data.")
-flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/checkpoints/20251217_204446", "Path to save checkpoints.")#"/home/admin01/lyw_2/hil-serl_original/checkpoints/"+time.strftime("%Y%m%d_%H%M%S", time.localtime())
+flags.DEFINE_multi_string("demo_path", "/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-23_15-06-20.pkl", "Path to the demo data.")
+flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/checkpoints/20251224_0017", "Path to save checkpoints.")#"/home/admin01/lyw_2/hil-serl_original/checkpoints/"+time.strftime("%Y%m%d_%H%M%S", time.localtime())
 flags.DEFINE_integer("eval_checkpoint_step", 0 ,"Step to evaluate the checkpoint.")
-flags.DEFINE_integer("eval_n_trajs", 0, "Number of trajectories to evaluate.")
+flags.DEFINE_integer("eval_n_trajs", 20, "Number of trajectories to evaluate.")
 flags.DEFINE_boolean("save_video", False, "Save video.")
 
 flags.DEFINE_boolean(
     "debug", False, "Debug mode."
 )  # debug mode will disable wandb logging
 
+import signal, sys, torch
 
+def handler(sig, frame):
+    torch.cuda.empty_cache()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handler)
 devices = jax.local_devices()
 num_devices = len(devices)
 sharding = jax.sharding.PositionalSharding(devices)
@@ -94,6 +100,7 @@ def actor(agent, data_store, intvn_data_store, env, sampling_rng):
                 actions = np.asarray(jax.device_get(actions))
 
                 next_obs, reward, done, truncated, info = env.step(actions)
+                print("***************reward:", reward)
                 obs = next_obs
 
                 if done:
@@ -366,11 +373,12 @@ def main(_):
     assert config.batch_size % num_devices == 0
     # seed
     rng = jax.random.PRNGKey(FLAGS.seed)
+
     rng, sampling_rng = jax.random.split(rng)
 
     assert FLAGS.exp_name in CONFIG_MAPPING, "Experiment folder not found."
     env = config.get_environment(
-        fake_env=FLAGS.learner, evaluate=(FLAGS.eval_checkpoint_step>0)
+        fake_env=FLAGS.learner, evaluate=(FLAGS.eval_checkpoint_step>0), save_video=FLAGS.save_video
     )
     env = RecordEpisodeStatistics(env)
 

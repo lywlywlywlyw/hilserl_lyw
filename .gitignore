@@ -2,4 +2,7 @@ checkpoints
 data
 examples/classifier_ckpt
 examples/classifier_data
+examples/classifier_data_history
 examples/wandb
+videos
+other_code

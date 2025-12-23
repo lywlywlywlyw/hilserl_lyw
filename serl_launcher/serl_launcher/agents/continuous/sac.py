@@ -481,31 +481,31 @@ class SACAgent(flax.struct.PyTreeNode):
                 resnetv1_configs,
             )
 
-            pretrained_encoder0 = resnetv1_configs["resnetv1-10-frozen"](
+            pretrained_encoders0 = {image_key: resnetv1_configs["resnetv1-10-frozen"](
                 pre_pooling=True,
                 name="pretrained_encoder",
-            )
+            ) for image_key in image_keys}
             encoders0 = {
                 image_key: PreTrainedResNetEncoder(
                     pooling_method="spatial_learned_embeddings",
                     num_spatial_blocks=8,
                     bottleneck_dim=256,
-                    pretrained_encoder=pretrained_encoder0,
+                    pretrained_encoder=pretrained_encoders0[image_key],
                     name=f"encoder_{image_key}",
                 )
                 for image_key in image_keys
             }
 
-            pretrained_encoder1 = resnetv1_configs["resnetv1-10-frozen"](
+            pretrained_encoders1 = {image_key: resnetv1_configs["resnetv1-10-frozen"](
                 pre_pooling=True,
                 name="pretrained_encoder",
-            )
+            ) for image_key in image_keys}
             encoders1 = {
                 image_key: PreTrainedResNetEncoder(
                     pooling_method="spatial_learned_embeddings",
                     num_spatial_blocks=8,
                     bottleneck_dim=256,
-                    pretrained_encoder=pretrained_encoder1,
+                    pretrained_encoder=pretrained_encoders1[image_key],
                     name=f"encoder_{image_key}",
                 )
                 for image_key in image_keys

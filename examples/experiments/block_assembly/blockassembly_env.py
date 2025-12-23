@@ -30,15 +30,40 @@ import cv2
 import jax.numpy as jnp
 import jax
 
+
+class AdmittanceController:
+    def __init__(self, mass, damp, stiff, control_period):
+        self.mass = mass
+        self.damp = damp
+        self.stiff = stiff
+        self.control_period = control_period
+
+
+        self.delta_pos = 0
+        self.cmd_vel = 0
+        self.cmd_acc = 0
+    # err_pos, err_vel==0
+    def cal_controller_output(self, err_wrench, err_pos, err_vel):
+        # 导纳控制核心公式0.1+1/20*(-err_f+200*err_v)
+        self.cmd_acc = (1.0 / self.mass) * (
+            -err_wrench + self.damp * err_vel + self.stiff * err_pos
+        )
+        # 离散速度积分
+        self.cmd_vel = self.cmd_acc * self.control_period
+        # 离散位移增量
+        self.delta_pos = self.cmd_vel * self.control_period
+          
+        return self.delta_pos#, self.cmd_acc, self.cmd_vel
+    
 # params
 dof_lower_limits = [-6.2800, -6.2800, -3.1400, -6.2800, -6.2800, -6.2800,  0.0000,  0.0000, 0.0000,  0.0000,  0.0000,  0.2000, -6.2800, -6.2800, -3.1400, -6.2800, -6.2800, -6.2800,  0.0000,  0.0000,  0.0000,  0.0000,  0.0000,  0.2000]
 dof_upper_limits = [6.2800, 6.2800, 3.1400, 6.2800, 6.2800, 6.2800, 1.7000, 1.7000, 1.7000, 1.7000, 0.5000, 1.3000, 6.2800, 6.2800, 3.1400, 6.2800, 6.2800, 6.2800, 1.7000, 1.7000, 1.7000, 1.7000, 0.5000, 1.3000]
 
 class BlockAssemblyEnv(gym.Env):
-    def __init__(self, fake_env, reward_func, evaluate=0, offline_train=False):
+    def __init__(self, fake_env, evaluate=0, save_video=False, classifer=False, offline_train=False):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         # self.observation_space = gym.spaces.Box(low=-5, high=5, shape=(36,), dtype=np.float32)
-        self.observation_space = self.observation_space = gym.spaces.Dict(
+        self.observation_space = gym.spaces.Dict(
             {
                 "images": gym.spaces.Dict({"shelf": gym.spaces.Box(
                     low=0,
@@ -57,7 +82,11 @@ class BlockAssemblyEnv(gym.Env):
                     {
                         "tcp_pose": gym.spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32),
                         "tcp_vel": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
-                        "tcp_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        "r_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        "l_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        "r_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        "l_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+
                     }
                 ),
             }
@@ -69,7 +98,7 @@ class BlockAssemblyEnv(gym.Env):
         self.queue_index = 0
         self.evaluate = evaluate
         self.offline_train = offline_train
-        
+        self.classifer = classifer
         # important parameters-------------------
         # baseur和world的关系
         arm_initial_pos = torch.tensor([-0.8625, -0.2400,  1.3946]).to(self.device)
@@ -113,10 +142,12 @@ class BlockAssemblyEnv(gym.Env):
         self.random_pos_range = 0.03
         self.random_rot_range = 0.175
         # 世界坐标系下的安全范围（y轴向右）
-        self.safety_box_size_min = np.array([-self.random_pos_range-0.01, -self.random_pos_range-0.01, -0.1-0.01, -self.random_rot_range-0.05, -self.random_rot_range-0.05, -self.random_rot_range-0.05])
+        self.safety_box_size_min = np.array([-self.random_pos_range-0.01, -self.random_pos_range-0.01, -0.1-0.03, -self.random_rot_range-0.05, -self.random_rot_range-0.05, -self.random_rot_range-0.05])
         self.safety_box_size_max = np.array([self.random_pos_range+0.01, self.random_pos_range+0.01, 0.01, self.random_rot_range+0.05, self.random_rot_range+0.05, self.random_rot_range+0.05])
+        self.random_pos_range = 0
+        self.random_rot_range = 0
         # 步长# set same as hilserl peg insertion
-        self.action_pos_range_value = 0.01
+        self.action_pos_range_value = 0.005
         self.action_rot_range_value = 0.05
         # 控制频率
         self.hz = 10
@@ -151,12 +182,58 @@ class BlockAssemblyEnv(gym.Env):
             self.first_reset_flag = True
             self.start_time = -1
             self.next_ep_long_reset = False
+            self.sequence_random_reset = False # 按照范围大小逐步增加初始随机化程度
+            if self.sequence_random_reset:
+                self.sequence_random_reset_index = 0
+                self.intervene_flag = False
+                self.intervene_ep_record_list = []
+                self.success_ep_record_list = []
+                self.random_pos_min_list = [self.random_pos_range/5*(i) for i in range(5)]
+                self.random_pos_max_list = [self.random_pos_range/5*(i+1) for i in range(5)]
+                self.random_rot_min_list = [self.random_rot_range/5*(i) for i in range(5)]
+                self.random_rot_max_list = [self.random_rot_range/5*(i+1) for i in range(5)]
+                self.random_weight_list = [
+                    [0.45, 0.30, 0.15, 0.07, 0.03],
+                    [0.30, 0.30, 0.20, 0.12, 0.08],
+                    [0.18, 0.22, 0.25, 0.20, 0.15],
+                    [0.12, 0.18, 0.22, 0.25, 0.23],
+                    [0.08, 0.12, 0.18, 0.27, 0.35],
+                ]
+
             # listener = keyboard.Listener(on_press=self.on_press)
             # listener.start()
             # reward
-            self.reward_func = reward_func
-            self.success_flag = 0
+            self.success_flag = []
             self.stop_flag = False
+            # record video
+            self.save_video = save_video
+            if self.save_video:
+                currtime = datetime.datetime.strftime(datetime.datetime.now(), '%m%d_%H%M%S')
+                output = f"/home/admin01/lyw_2/hil-serl_original/videos/record_{currtime}.avi"
+                cap = cv2.VideoCapture(0)
+                fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+                self.writer = cv2.VideoWriter(output, fourcc, 30, (640, 480))
+                import sys
+                import signal
+                def stop_record(sig, frame):
+                    self.writer.release()
+                    cap.release()
+                    sys.exit(0)
+
+                signal.signal(signal.SIGINT, stop_record)
+            # 双臂控制
+            self.double_control = False
+        # 导纳控制
+        self.mass = 10
+        self.stiffness = 0
+        self.damping = 0
+        self.admittance_controller = AdmittanceController(self.mass, self.damping, self.stiffness, 1)
+        # 用手指受力进行力控
+        self.x_force_positive = 0
+        self.x_force_negative = 0
+        self.last_x_force_positive = 0
+        self.last_x_force_negative = 0
+        self.last_left_hand_force = np.array([0, 0, 0, 0, 0, 0])
 
     def on_press(self, key):
         try:
@@ -253,9 +330,13 @@ class BlockAssemblyEnv(gym.Env):
         """
         expert_a, buttons = self.expert.get_action()
         success, reset = buttons[0], buttons[-1]
+        if len(self.success_flag) == 10:
+            self.success_flag.pop(0)
         if success:
-            self.success_flag = 1
-            self.next_ep_long_reset = True
+            self.success_flag.append(1)
+            # self.next_ep_long_reset = True
+        else:
+            self.success_flag.append(0)
         if reset:
             self.next_ep_long_reset = True
         intervened = False
@@ -288,14 +369,34 @@ class BlockAssemblyEnv(gym.Env):
     def step(self, action):
         
         print("--------------------------step:", self.steps)
-        initial_obs, initial_tcp_pose = self.compute_obs()
-        
+        if self.sequence_random_reset:
+            print("current hard level:", self.sequence_random_reset_index)
+        initial_obs, initial_tcp_pose, initial_r_force, initial_tcp_vel = self.compute_obs()
+
         info = {}
         bad_data = False
         action, is_intervened = self.action(action)
         if is_intervened:
             info["intervened"] = action
+            if self.sequence_random_reset:
+                self.intervene_flag = True
+        # # 导纳控制
+        left_hand_force = np.array(self.another_hand.get_hand_force())
+        self.x_force_positive = left_hand_force[1:4][abs(left_hand_force[1:4]) < 100].mean() if len(left_hand_force[1:4][abs(left_hand_force[1:4]) < 100]) > 0 else copy.deepcopy(self.last_x_force_positive)#x正方向的力
+        self.x_force_negative = -left_hand_force[-2] if abs(left_hand_force[-2]) < 100 else copy.deepcopy(self.last_x_force_negative) #x负方向的力
+        delta_x_force = np.clip(self.x_force_positive - self.last_x_force_positive + self.x_force_negative - self.last_x_force_negative, -10, 10)
+        delta_p = self.admittance_controller.cal_controller_output(delta_x_force, 0, 0)
+        print("##########$$$$$$$$$$$$$$$$")
+        print("@left_hand_force:", left_hand_force)
+        print("@delta_p:", delta_p)
+        print("@delta_x_force:", delta_x_force)
+        # print("@acc:", acc)
+        # print("@v:", v)
+        action = action.copy()
+        action[0] += delta_p
         action = np.clip(action, self.action_space.low, self.action_space.high)
+
+        
         action = torch.from_numpy(action).float().to(self.device)
         initial_baseur2ee_pos0 = torch.from_numpy(initial_tcp_pose[:3].copy()).to(self.device)
         initial_baseur2ee_quat0 = torch.from_numpy(initial_tcp_pose[3:].copy()).to(self.device)
@@ -310,7 +411,6 @@ class BlockAssemblyEnv(gym.Env):
         clamp_target_baseur2ee_pos0, clamp_target_baseur2ee_rotvec0 = self.safety_box(target_world2ee_pos0, target_world2ee_quat0)
         arm_pos = self.cal_ik_real_robot(clamp_target_baseur2ee_pos0.cpu().numpy(), clamp_target_baseur2ee_rotvec0, self.rtde_r.getActualQ())#self.rtde_c.getInverseKinematics(np.concatenate([clamp_target_baseur2ee_pos0.cpu().numpy(), baseur2ee_rot0]))
         if arm_pos is None:
-            self.rtde_c.stopJ(1, False)
             bad_data = True
         else:
             print("initial_dof_pos0:", self.rtde_r.getActualQ())
@@ -325,7 +425,7 @@ class BlockAssemblyEnv(gym.Env):
             # self.start_time = time.time()
             try:
                 if self.stop_flag == False:
-                    self.rtde_c.servoJ(arm_pos, 0.8, 0.1, (1.0 / self.hz), 0.2, 600)
+                    self.rtde_c.servoJ(arm_pos, 0.4*(1 - np.clip(3*abs(delta_p), 0, 1)), 0.1*(1 - np.clip(3*abs(delta_p), 0, 1)), (1.0 / self.hz), 0.2, 600)
             except RuntimeError as e:
                 print("step_error:", e)
                 input("把手臂移动一下，脱离安全性停止。。。")
@@ -333,14 +433,19 @@ class BlockAssemblyEnv(gym.Env):
                 self.next_ep_long_reset = True
                 self.reconnect_to_robot()
             time.sleep(1.0 / self.hz)
-        next_obs, next_tcp_pose = self.compute_obs()
+        next_obs, next_tcp_pose, next_r_force, next_tcp_vel = self.compute_obs()
         
         self.steps += 1
         self.total_steps += 1
-        reward = copy.deepcopy(self.success_flag)#self.reward_func(next_obs["images"])
-        self.success_flag = 0
-        print("***************reward:", reward)
-        done = (self.steps == self.max_episode_steps)|(reward == 1)
+        if (len(self.success_flag) >= 2) and (self.success_flag[-1] == 1) and (self.success_flag[-2] == 1):
+            reward = 1
+        else:
+            reward = 0
+        
+        if self.classifer:
+            done = (self.steps == self.max_episode_steps)
+        else:
+            done = (self.steps == self.max_episode_steps)|(reward == 1)
         
         self.episode_reward += reward
         info["bad_data"] = bad_data
@@ -417,20 +522,25 @@ class BlockAssemblyEnv(gym.Env):
     def process_image(self, image) -> np.ndarray:
         cropped_rgb = image[:, 80:560, :]
         resized = cv2.resize(cropped_rgb, self.img_size.shape[:2][::-1])
-        processed_img = resized[..., ::-1]
+        processed_img = resized#[..., ::-1]
         return processed_img
         
     def get_img(self):
         shelf_img = self.capture_frame(self.pipeline_shelf, self.aligner_shelf)
+        if self.save_video:
+            self.writer.write(shelf_img)
         ground_img = self.capture_frame(self.pipeline_ground, self.aligner_ground)
 
         # combined = np.hstack([cv2.cvtColor(shelf_img.reshape(480, 640, 3).astype(np.uint8), cv2.COLOR_BGR2RGB), cv2.cvtColor(ground_img.reshape(480, 640, 3).astype(np.uint8), cv2.COLOR_BGR2RGB)])
-        combined = np.hstack([shelf_img, ground_img])
+        
+        processed_shelf_img = self.process_image(shelf_img)
+        processed_ground_img = self.process_image(ground_img)
+        combined = np.hstack([processed_shelf_img, processed_ground_img])
         
         cv2.imshow("Two Cameras", combined)
         cv2.waitKey(1)
 
-        images = {"shelf": self.process_image(shelf_img), "ground": self.process_image(ground_img)}
+        images = {"shelf": processed_shelf_img, "ground": processed_ground_img}
         return images
 
     def get_state(self):
@@ -442,11 +552,18 @@ class BlockAssemblyEnv(gym.Env):
         r_speed = jnp.array(self.rtde_r.getActualTCPSpeed())
 
         r_force = jnp.array(self.rtde_r.getActualTCPForce())
+        l_force = jnp.array(self.another_rtde_r.getActualTCPForce())
+
+        r_hand_force = jnp.array(self.hand.get_hand_force())
+        l_hand_force = jnp.array(self.another_hand.get_hand_force())
 
         state_observation = {
             "tcp_pose": tcp_pose,
             "tcp_vel": r_speed,
-            "tcp_force": r_force#force&torque
+            "r_force": r_force,#force&torque
+            "l_force": l_force,
+            "r_hand_force": r_hand_force,
+            "l_hand_force": l_hand_force
         }
         
         return state_observation
@@ -454,15 +571,50 @@ class BlockAssemblyEnv(gym.Env):
     def compute_obs(self):
         images = self.get_img()
         state_observation = self.get_state()
-        return copy.deepcopy(dict(images=images, state=state_observation)), jax.device_get(state_observation["tcp_pose"])
+
+        return copy.deepcopy(dict(images=images, state=state_observation)), jax.device_get(state_observation["tcp_pose"]), jax.device_get(state_observation["r_force"]), jax.device_get(state_observation["tcp_vel"])
 
     def reset_within_certain_range(self):
+        random_rot_min = 0
+        random_rot_max = self.random_rot_range
+        random_pos_min = 0
+        random_pos_max = self.random_pos_range
+        if self.sequence_random_reset:
+            if (self.intervene_ep_record_list[-5:] == [0, 0, 0, 0, 0]) and (self.success_ep_record_list[-5:] == [1, 1, 1, 1, 1]):
+                self.sequence_random_reset_index = min(4, self.sequence_random_reset_index + 1)
+            choice = np.random.choice(len(self.random_weight_list[self.sequence_random_reset_index]), p=self.random_weight_list[self.sequence_random_reset_index])
+            random_rot_min = self.random_rot_min_list[choice]
+            random_pos_min = self.random_pos_min_list[choice]
+            random_rot_max = self.random_rot_max_list[choice]
+            random_pos_max = self.random_pos_max_list[choice]
+        
         while True:
-            random_angle = np.random.uniform(low=-self.random_rot_range, high=self.random_rot_range, size=3)
+            # random_angle = np.random.uniform(low=-self.random_rot_range, high=self.random_rot_range, size=3)
+            # 幅值范围 [min, max]
+            rot_mag = np.random.uniform(
+                low=random_rot_min,
+                high=random_rot_max,
+                size=3
+            )
+
+            # 随机符号 ±1
+            rot_sign = np.random.choice([-1.0, 1.0], size=3)
+
+            random_angle = rot_mag * rot_sign
+
             tcp02tcp1_quat = torch.from_numpy(R.from_euler("xyz", random_angle).as_quat()).float().to(self.device)
             tcp02tcp1_quat_dt = self.quat_mul(self.quat_mul(self.quat_conjugate(self.init_world2tcp_quat0), tcp02tcp1_quat), self.init_world2tcp_quat0)
             
-            tcp02tcp1_pos = ((torch.rand(3) - 0.5) * 2 * self.random_pos_range).to(self.device) 
+            # tcp02tcp1_pos = ((torch.rand(3) - 0.5) * 2 * self.random_pos_range).to(self.device) 
+            # 幅值 [min, max]
+            pos_mag = torch.empty(3, device=self.device).uniform_(
+                random_pos_min, random_pos_max
+            )
+
+            # 随机符号 ±1
+            pos_sign = torch.randint(0, 2, (3,), device=self.device) * 2 - 1
+
+            tcp02tcp1_pos = pos_mag * pos_sign
             tcp02tcp1_pos[2] = 0 # 在world坐标系下的z方向上不动，在xy平面上动
 
             target_world2tcp_pos = (self.init_world2tcp_pos0 + tcp02tcp1_pos)
@@ -499,19 +651,41 @@ class BlockAssemblyEnv(gym.Env):
             self.first_reset_flag = False
             self.next_ep_long_reset = False
         self.reconnect_to_robot()    
-        self.rtde_c.moveJ(self.init_dof_pos0, 0.1, 1)
-        self.another_rtde_c.moveJ(self.init_dof_pos1, 0.1, 1)
+        self.rtde_c.moveJ(self.init_dof_pos0, 0.05, 0.5)
+        self.another_rtde_c.moveJ(self.init_dof_pos1, 0.05, 0.5)
         self.reset_within_certain_range()
         
-        obs, _ = self.compute_obs()
+        obs, _, _, _ = self.compute_obs()
         if self.evaluate != 1:
             wandb.log({'mujoco_reward/reward': self.episode_reward}, step=self.total_steps)
+        if self.sequence_random_reset:
+            if len(self.success_ep_record_list) == 10:
+                self.success_ep_record_list.pop(0)
+            if self.episode_reward > 0:
+                self.success_ep_record_list.append(1)
+            else:
+                self.success_ep_record_list.append(0)
         self.episode_reward = 0
         self.steps = 0
         print("!!!!!!!!!!!!!!!!!!!!!episode reset!!!!!!!!!!!!!!!!!!!!!")
-        self.success_flag = 0
+        self.success_flag = []
         self.next_ep_long_reset = False
         self.stop_flag = False
+        if self.sequence_random_reset:
+            if len(self.intervene_ep_record_list) == 10:
+                self.intervene_ep_record_list.pop(0)
+            if self.intervene_flag:
+                self.intervene_ep_record_list.append(1)
+            else:
+                self.intervene_ep_record_list.append(0)
+            self.intervene_flag = False
+        left_hand_force = np.array(self.another_hand.get_hand_force())
+        self.x_force_positive = left_hand_force[1:4][abs(left_hand_force[1:4]) < 100].mean() if len(left_hand_force[1:4][abs(left_hand_force[1:4]) < 100]) > 0 else left_hand_force[1:4].mean()#x正方向的力 
+        self.x_force_negative = -left_hand_force[-2] #x负方向的力
+        
+        self.last_x_force_positive = copy.deepcopy(self.x_force_positive)
+        self.last_x_force_negative = copy.deepcopy(self.x_force_negative)
+        self.last_left_hand_force = copy.deepcopy(left_hand_force)
         return obs, {}
 
     
@@ -533,18 +707,18 @@ class BlockAssemblyEnv(gym.Env):
             self.demo_ik()
         for i in range(2):
             flag =input("how to reset right hand:")
-            while flag not in ["0","1","2","3","4","5","6","7","8"]:
+            while flag not in ["4","5","6","7","8"]:
                 flag =input("how to reset right hand:")
             flag = int(flag)
-            if flag == 0:
-                self.control_right_hand0()
-            elif flag == 1:
-                self.control_left_hand1()
-            elif flag == 2:
-                self.control_right_hand2()
-            elif flag == 3:
-                self.control_left_hand3()
-            elif flag == 4:
+            # if flag == 0:
+            #     self.control_right_hand0()
+            # elif flag == 1:
+            #     self.control_left_hand1()
+            # elif flag == 2:
+            #     self.control_right_hand2()
+            # elif flag == 3:
+            #     self.control_left_hand3()
+            if flag == 4:
                 self.control_right_hand4()
             elif flag == 5:
                 self.control_left_hand5()
@@ -567,18 +741,18 @@ class BlockAssemblyEnv(gym.Env):
 
         for i in range(2):
             flag = input("how to reset left hand:")
-            while flag not in ["0","1","2","3","4","5","6","7","8"]:
+            while flag not in ["4","5","6","7","8"]:
                 flag = input("how to reset left hand:")
             flag = int(flag)
-            if flag == 0:
-                self.control_right_hand0()
-            elif flag == 1:
-                self.control_left_hand1()
-            elif flag == 2:
-                self.control_right_hand2()
-            elif flag == 3:
-                self.control_left_hand3()
-            elif flag == 4:
+            # if flag == 0:
+            #     self.control_right_hand0()
+            # elif flag == 1:
+            #     self.control_left_hand1()
+            # elif flag == 2:
+            #     self.control_right_hand2()
+            # elif flag == 3:
+            #     self.control_left_hand3()
+            if flag == 4:
                 self.control_right_hand4()
             elif flag == 5:
                 self.control_left_hand5()
@@ -598,50 +772,69 @@ class BlockAssemblyEnv(gym.Env):
                     print(f"[RTDE] 连接失败: {e}")
                     time.sleep(1)
 
-    def control_left_hand1(self):
-        self.another_hand.set_hand_angle(np.array([0, 0, 0, 0, 0, 0]))
-        time.sleep(0.5)
-        self.another_hand.set_hand_angle(np.array(self.rh_data[0])[[34, 32, 30, 28, 25, 24]])
-        self.another_rtde_c.moveJ(self.rh_data[0][18:24], 0.1, 1)
-        for i, arm_pose in enumerate(self.rh_data[0:]):
-            # inp = input("press enter to continue")
-            self.another_rtde_c.servoJ(arm_pose[18:24], 0.8, 0.6, 0.05, 0.2, 600)
-            # print("left_hand_target_angle:", np.array(arm_pose)[[34, 32, 30, 28, 25, 24]])
-            self.another_hand.set_hand_angle(np.array(arm_pose)[[34, 32, 30, 28, 25, 24]])
-            # time.sleep(0.02)
-        time.sleep(1)
-    def control_right_hand0(self):
-        self.hand.set_hand_angle(np.array([0, 0, 0, 0, 0, 0]))
-        time.sleep(0.5)
-        self.hand.set_hand_angle(np.array(self.rh_data[0])[[16, 14, 12, 10, 7, 6]])
-        self.rtde_c.moveJ(self.rh_data[0][0:6], 0.1, 1)
-        for i, arm_pose in enumerate(self.rh_data[0:]):
-            self.rtde_c.servoJ(arm_pose[0:6], 0.8, 0.6, 0.05, 0.2, 600)
-            self.hand.set_hand_angle(np.array(arm_pose)[[16, 14, 12, 10, 7, 6]])
-            # time.sleep(0.02)
-        time.sleep(1)
-    def control_left_hand3(self):
-        self.another_rtde_c.moveJ(self.rh_data[-1][18:24], 0.1, 1)#another_rtde_c.servoJ(self.rh_data[799][18:24], 0.2, 0.1, 0.05, 0.2, 600)
-        # self.another_hand.set_hand_angle(np.array(self.rh_data[799])[[34, 32, 30, 28, 25, 24]])
-    def control_right_hand2(self):
-        self.rtde_c.moveJ(self.rh_data[-1][0:6], 1, 1)#rtde_c.servoJ(self.rh_data[799][0:6], 0.2, 0.1, 0.05, 0.2, 600)
-        # self.hand.set_hand_angle(np.array(self.rh_data[799])[[16, 14, 12, 10, 7, 6]])
+    def set_hand_angle(self, str_hand, angle):
+        while True:
+            try:
+                if str_hand == "right":
+                    self.hand.set_hand_angle(angle)
+                else:
+                    self.another_hand.set_hand_angle(angle)
+                break
+            except RuntimeError as e:
+                print(f"[WARN] {str_hand} hand control failed: {e}!!!!!!!!!!!!!!!!!!!!!")
+                if str_hand == "right":
+                    self.hand = Hand(lower_limit=dof_lower_limits[6:12], upper_limit=dof_upper_limits[6:12], port='/dev/ttyUSB0')
+                else:
+                    self.another_hand = Hand(lower_limit=dof_lower_limits[18:24], upper_limit=dof_upper_limits[18:24], port='/dev/ttyUSB1')
+
+    # def control_left_hand1(self):
+    #     self.another_hand.set_hand_angle(np.array([0, 0, 0, 0, 0, 0]))
+    #     time.sleep(0.5)
+    #     self.another_hand.set_hand_angle(np.array(self.rh_data[0])[[34, 32, 30, 28, 25, 24]])
+    #     self.another_rtde_c.moveJ(self.rh_data[0][18:24], 0.1, 1)
+    #     for i, arm_pose in enumerate(self.rh_data[0:]):
+    #         # inp = input("press enter to continue")
+    #         self.another_rtde_c.servoJ(arm_pose[18:24], 0.8, 0.6, 0.05, 0.2, 600)
+    #         # print("left_hand_target_angle:", np.array(arm_pose)[[34, 32, 30, 28, 25, 24]])
+    #         self.another_hand.set_hand_angle(np.array(arm_pose)[[34, 32, 30, 28, 25, 24]])
+    #         # time.sleep(0.02)
+    #     time.sleep(1)
+    # def control_right_hand0(self):
+    #     self.hand.set_hand_angle(np.array([0, 0, 0, 0, 0, 0]))
+    #     time.sleep(0.5)
+    #     self.hand.set_hand_angle(np.array(self.rh_data[0])[[16, 14, 12, 10, 7, 6]])
+    #     self.rtde_c.moveJ(self.rh_data[0][0:6], 0.1, 1)
+    #     for i, arm_pose in enumerate(self.rh_data[0:]):
+    #         self.rtde_c.servoJ(arm_pose[0:6], 0.8, 0.6, 0.05, 0.2, 600)
+    #         self.hand.set_hand_angle(np.array(arm_pose)[[16, 14, 12, 10, 7, 6]])
+    #         # time.sleep(0.02)
+    #     time.sleep(1)
+    # def control_left_hand3(self):
+    #     self.another_rtde_c.moveJ(self.rh_data[-1][18:24], 0.1, 1)#another_rtde_c.servoJ(self.rh_data[799][18:24], 0.2, 0.1, 0.05, 0.2, 600)
+    #     # self.another_hand.set_hand_angle(np.array(self.rh_data[799])[[34, 32, 30, 28, 25, 24]])
+    # def control_right_hand2(self):
+    #     self.rtde_c.moveJ(self.rh_data[-1][0:6], 1, 1)#rtde_c.servoJ(self.rh_data[799][0:6], 0.2, 0.1, 0.05, 0.2, 600)
+    #     # self.hand.set_hand_angle(np.array(self.rh_data[799])[[16, 14, 12, 10, 7, 6]])
     def control_left_hand5(self):
         new_pos = self.init_hand_pos.copy()
         new_pos[3] += 0.03
         new_pos[1] += 0.13
-        self.another_hand.set_hand_angle(new_pos)
+        # self.another_hand.set_hand_angle(new_pos+0.05)
+        self.set_hand_angle("left", new_pos+0.05)
     def control_right_hand4(self):
-        self.hand.set_hand_angle(self.init_hand_pos)
+        # self.hand.set_hand_angle(self.init_hand_pos+0.05)
+        self.set_hand_angle("right", self.init_hand_pos+0.05)
     def control_left_hand7(self):
         self.another_rtde_c.moveJ(self.init_dof_pos1, 1, 1)#another_rtde_c.servoJ(self.rh_data[799][18:24], 0.2, 0.1, 0.05, 0.2, 600)
         new_pos = self.init_hand_pos.copy()
-        new_pos -= 0.15
+        new_pos -= 0.25
         new_pos[-1] += 0.15
-        self.another_hand.set_hand_angle(new_pos)
+        # self.another_hand.set_hand_angle(new_pos)
+        self.set_hand_angle("left", new_pos)
     def control_right_hand6(self):
         self.rtde_c.moveJ(self.init_dof_pos0, 1, 1)#rtde_c.servoJ(self.rh_data[799][0:6], 0.2, 0.1, 0.05, 0.2, 600)
-        self.hand.set_hand_angle(self.init_hand_pos-0.15)
+        # self.hand.set_hand_angle(self.init_hand_pos-0.15)
+        self.set_hand_angle("right", self.init_hand_pos-0.15)
 
     def demo_ik(self):  
         baseur2ee_pose = self.another_rtde_c.getForwardKinematics()
@@ -729,14 +922,55 @@ if __name__ == '__main__':
     initial_dof_pos0: [1.054001808166504, -0.4473608175860804, 0.2894291877746582, 0.9450591802597046, 1.5849055051803589, 2.3439486026763916]
     action0: [-1.81547987 -2.34962344 -1.2982676  -0.34044909  1.43396115 -0.59965008]
     """
-    
-    from examples.experiments.block_assembly.spacemouse import pyspacemouse
-    pyspacemouse.open()
+    env = BlockAssemblyEnv(False, 1)
     while True:
-        state = pyspacemouse.read_all()
-        state = state[0]
-        print("xyz:", state.x, state.y, state.z)
-        print("rpy:", state.roll, state.pitch, state.yaw)
-        print("buttion:", state.buttons)
-        print("---------------------------")
+        print(env.hand.get_hand_force())
         time.sleep(0.1)
+    # from examples.experiments.block_assembly.spacemouse import pyspacemouse
+    # pyspacemouse.open()
+    # while True:
+    #     state = pyspacemouse.read_all()
+    #     state = state[0]
+    #     print("xyz:", state.x, state.y, state.z)
+    #     print("rpy:", state.roll, state.pitch, state.yaw)
+    #     print("buttion:", state.buttons)
+    #     print("---------------------------")
+    #     time.sleep(0.1)
+    # import pickle as pkl
+    # with open("/home/admin01/lyw_2/hil-serl_original/examples/episode_record.pkl", "rb") as f:
+    #     data_list = pkl.load(f)
+    # mass = 20
+    # stiffness = 80
+    # damping = 2 * (mass * stiffness) ** 0.5
+    # admittance_controller = AdmittanceController(6, mass, damping, stiffness, np.array([0, 0, 1, 0, 0, 0]).astype(bool), 0.1)
+    # cnt = 0
+    # for data in data_list:
+    #     img = data["img"]
+    #     initial_r_force = data["initial_r_force"]
+    #     initial_tcp_vel = data["initial_tcp_vel"]
+    #     action = data["action"]
+    #     force = np.linalg.norm([-initial_r_force[1], -initial_r_force[2]])
+    #     vel = np.linalg.norm([-initial_tcp_vel[1], -initial_tcp_vel[2]])
+    #     delta_p, acc, v = admittance_controller.cal_controller_output(np.ones(6,)*force, action, -0.4*np.ones(6,)-initial_tcp_vel)
+    #     print(f"------------{cnt}")
+        
+    #     # print("delta_p:", delta_p)
+    #     # print("acc:", acc)
+    #     # print("v:", v)
+    #     # print("force:", force)
+    #     # print("initial_tcp_vel:", initial_tcp_vel)
+    #     # print("action:", action)
+    #     # print("initial_r_force:", initial_r_force)
+    #     print("initial_tcp_vel:", True if ((initial_tcp_vel[1]<0) and (initial_tcp_vel[2]<0)) else False)
+    #     import matplotlib.pyplot as plt
+    #     import cv2
+    #     # img_rgb = img.reshape(480, 640, 3).astype(np.uint8)
+    #     # # plt.imshow(img_rgb)
+    #     # # plt.axis('off')
+    #     # # plt.show()
+    #     # cv2.imshow("img", img_rgb)
+    #     # cv2.waitKey(0)
+    #     cnt += 1
+
+
+

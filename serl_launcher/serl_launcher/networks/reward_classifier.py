@@ -67,7 +67,7 @@ def create_classifier(
     encoder_def = EncodingWrapper(
         encoder=encoders,
         use_proprio=False,
-        enable_stacking=False,
+        enable_stacking=True,
         image_keys=image_keys,
     )
     if n_way == 2:
