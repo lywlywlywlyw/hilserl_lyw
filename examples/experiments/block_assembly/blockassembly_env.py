@@ -16,7 +16,7 @@ import gymnasium as gym
 import pickle
 import trimesh as tm
 from pointnet2_ops import pointnet2_utils
-from pynput import keyboard
+# from pynput import keyboard
 import wandb
 import datetime
 from ur_analytic_ik import ur5e
@@ -81,11 +81,11 @@ class BlockAssemblyEnv(gym.Env):
                 "state": gym.spaces.Dict(
                     {
                         "tcp_pose": gym.spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32),
-                        "tcp_vel": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
-                        "r_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
-                        "l_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
-                        "r_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
-                        "l_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        # "tcp_vel": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        # "r_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        # "l_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        # "r_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        # "l_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
 
                     }
                 ),
@@ -100,6 +100,8 @@ class BlockAssemblyEnv(gym.Env):
         self.offline_train = offline_train
         self.classifer = classifer
         # important parameters-------------------
+        # control hand
+        self.control_hand = False
         # baseur和world的关系
         arm_initial_pos = torch.tensor([-0.8625, -0.2400,  1.3946]).to(self.device)
         another_arm_initial_pos = torch.tensor([-0.8625,  0.2400,  1.3946]).to(self.device)
@@ -131,11 +133,19 @@ class BlockAssemblyEnv(gym.Env):
         
         # 可调参数-------------------------------------
         # 距离完全插入位姿10cm
-        self.init_dof_pos0 = np.array([0.987450361251831, -0.934936825429098, 1.25439453125, 0.02481377124786377, 1.4887490272521973, 2.568765163421631])
-        self.init_dof_pos1 = np.array([-1.1089, -2.5020, -0.6554, -3.7734, -1.7296,  0.7556])
-        self.init_hand_pos = np.array([5.317746399668977e-06, 1.0040700435638428, 0.9746702313423157, 1.01011061668396, 0.10482560843229294, 1.1795626878738403])
-        self.init_baseur2tcp_pos0 = np.array([-0.2722, -0.6226,  0.1909])
-        self.init_baseur2tcp_quat0 = np.array([ 0.0239, -0.8168,  0.4995,  0.2878])
+        if self.control_hand:
+            self.init_dof_pos0 = np.array([0.987450361251831, -0.934936825429098, 1.25439453125, 0.02481377124786377, 1.4887490272521973, 2.568765163421631])
+            self.init_dof_pos1 = np.array([-1.1089, -2.5020, -0.6554, -3.7734, -1.7296,  0.7556])
+            self.init_hand_pos = np.array([5.317746399668977e-06, 1.0040700435638428, 0.9746702313423157, 1.01011061668396, 0.10482560843229294, 1.1795626878738403])
+            self.init_baseur2tcp_pos0 = np.array([-0.2722, -0.6226,  0.1909])
+            self.init_baseur2tcp_quat0 = np.array([ 0.0239, -0.8168,  0.4995,  0.2878])
+        else:
+            self.init_dof_pos0 = np.array([1.017919898033142, -0.49334746996034795, 0.6514382362365723, 1.0057929754257202, 2.193951368331909, 2.9802491664886475])
+            self.init_dof_pos1 = np.array([-1.0199416319476526, -2.6652448813067835, -0.7377594153033655, -3.9303649107562464, -2.2327707449542444, 0.38903677463531494])
+            # self.init_hand_pos = np.array([5.317746399668977e-06, 1.0040700435638428, 0.9746702313423157, 1.01011061668396, 0.10482560843229294, 1.1795626878738403])
+            self.init_baseur2tcp_pos0 = np.array([-0.3160, -0.6288,  0.1297])
+            self.init_baseur2tcp_quat0 = np.array([-0.2374, -0.9020,  0.0763,  0.3523])
+        
         self.init_world2tcp_pos0 = self.quat_apply(self.r_world2baseur_rot, torch.from_numpy(self.init_baseur2tcp_pos0).float().to(self.device)) + self.r_world2baseur_pos
         self.init_world2tcp_quat0 = self.quat_mul(self.r_world2baseur_rot, torch.from_numpy(self.init_baseur2tcp_quat0).float().to(self.device))
         # 随机化和范围参数
@@ -154,6 +164,7 @@ class BlockAssemblyEnv(gym.Env):
         # episode_len
         self.max_episode_steps = 200
         if not fake_env:
+            
             from examples.experiments.block_assembly.spacemouse.spacemouse_expert import SpaceMouseExpert
             self.expert = SpaceMouseExpert()
             self.episode_reward = 0
@@ -164,11 +175,13 @@ class BlockAssemblyEnv(gym.Env):
             self.robot_ip = "172.16.17.93"
             self.rtde_r = rtde_receive.RTDEReceiveInterface(self.robot_ip)
             self.rtde_c = rtde_control.RTDEControlInterface(self.robot_ip)
-            self.hand = Hand(lower_limit=dof_lower_limits[6:12], upper_limit=dof_upper_limits[6:12], port='/dev/ttyUSB0')
+            if self.control_hand:
+                self.hand = Hand(lower_limit=dof_lower_limits[6:12], upper_limit=dof_upper_limits[6:12], port='/dev/ttyUSB0')
             self.another_robot_ip = "172.16.17.92"#"192.168.1.101"#?
             self.another_rtde_r = rtde_receive.RTDEReceiveInterface(self.another_robot_ip)
             self.another_rtde_c = rtde_control.RTDEControlInterface(self.another_robot_ip)
-            self.another_hand = Hand(lower_limit=dof_lower_limits[18:24], upper_limit=dof_upper_limits[18:24], port='/dev/ttyUSB1')
+            if self.control_hand:
+                self.another_hand = Hand(lower_limit=dof_lower_limits[18:24], upper_limit=dof_upper_limits[18:24], port='/dev/ttyUSB1')
             self.redis_server = redis.Redis(host='localhost', port=6379, db=0)
 
             if self.evaluate != 1:
@@ -234,16 +247,16 @@ class BlockAssemblyEnv(gym.Env):
         self.last_x_force_positive = 0
         self.last_x_force_negative = 0
         self.last_left_hand_force = np.array([0, 0, 0, 0, 0, 0])
-
-    def on_press(self, key):
-        try:
-            if isinstance(key, keyboard.Key):
-                if key == keyboard.Key.esc:
-                    self.next_ep_long_reset = True
-                if key == keyboard.Key.space:
-                    self.success_flag = 1
-        except AttributeError:
-            pass
+        
+    # def on_press(self, key):
+    #     try:
+    #         if isinstance(key, keyboard.Key):
+    #             if key == keyboard.Key.esc:
+    #                 self.next_ep_long_reset = True
+    #             if key == keyboard.Key.space:
+    #                 self.success_flag = 1
+    #     except AttributeError:
+    #         pass
 
     def init_camera(self, serial_number):
         pipeline = rs.pipeline()
@@ -371,29 +384,30 @@ class BlockAssemblyEnv(gym.Env):
         print("--------------------------step:", self.steps)
         if self.sequence_random_reset:
             print("current hard level:", self.sequence_random_reset_index)
-        initial_obs, initial_tcp_pose, initial_r_force, initial_tcp_vel = self.compute_obs()
+        initial_obs, initial_tcp_pose = self.compute_obs()
 
         info = {}
         bad_data = False
         action, is_intervened = self.action(action)
         if is_intervened:
-            info["intervened"] = action
+            info["intervene_action"] = action
             if self.sequence_random_reset:
                 self.intervene_flag = True
         # # 导纳控制
-        left_hand_force = np.array(self.another_hand.get_hand_force())
-        self.x_force_positive = left_hand_force[1:4][abs(left_hand_force[1:4]) < 100].mean() if len(left_hand_force[1:4][abs(left_hand_force[1:4]) < 100]) > 0 else copy.deepcopy(self.last_x_force_positive)#x正方向的力
-        self.x_force_negative = -left_hand_force[-2] if abs(left_hand_force[-2]) < 100 else copy.deepcopy(self.last_x_force_negative) #x负方向的力
-        delta_x_force = np.clip(self.x_force_positive - self.last_x_force_positive + self.x_force_negative - self.last_x_force_negative, -10, 10)
-        delta_p = self.admittance_controller.cal_controller_output(delta_x_force, 0, 0)
-        print("##########$$$$$$$$$$$$$$$$")
-        print("@left_hand_force:", left_hand_force)
-        print("@delta_p:", delta_p)
-        print("@delta_x_force:", delta_x_force)
+        if self.control_hand:
+            left_hand_force = np.array(self.another_hand.get_hand_force())
+            self.x_force_positive = left_hand_force[1:4][abs(left_hand_force[1:4]) < 100].mean() if len(left_hand_force[1:4][abs(left_hand_force[1:4]) < 100]) > 0 else copy.deepcopy(self.last_x_force_positive)#x正方向的力
+            self.x_force_negative = -left_hand_force[-2] if abs(left_hand_force[-2]) < 100 else copy.deepcopy(self.last_x_force_negative) #x负方向的力
+            delta_x_force = np.clip(self.x_force_positive - self.last_x_force_positive + self.x_force_negative - self.last_x_force_negative, -10, 10)
+            delta_p = self.admittance_controller.cal_controller_output(delta_x_force, 0, 0)
+            print("##########$$$$$$$$$$$$$$$$")
+            print("@left_hand_force:", left_hand_force)
+            print("@delta_p:", delta_p)
+            print("@delta_x_force:", delta_x_force)
         # print("@acc:", acc)
         # print("@v:", v)
         action = action.copy()
-        action[0] += delta_p
+        # action[0] += delta_p
         action = np.clip(action, self.action_space.low, self.action_space.high)
 
         
@@ -425,7 +439,9 @@ class BlockAssemblyEnv(gym.Env):
             # self.start_time = time.time()
             try:
                 if self.stop_flag == False:
-                    self.rtde_c.servoJ(arm_pos, 0.4*(1 - np.clip(3*abs(delta_p), 0, 1)), 0.1*(1 - np.clip(3*abs(delta_p), 0, 1)), (1.0 / self.hz), 0.2, 600)
+                    # self.rtde_c.servoJ(arm_pos, 0.4*(1 - np.clip(3*abs(delta_p), 0, 1)), 0.1*(1 - np.clip(3*abs(delta_p), 0, 1)), (1.0 / self.hz), 0.2, 600)
+                    self.rtde_c.servoJ(arm_pos, 0.4, 0.1, (1.0 / self.hz), 0.2, 600)
+
             except RuntimeError as e:
                 print("step_error:", e)
                 input("把手臂移动一下，脱离安全性停止。。。")
@@ -433,7 +449,7 @@ class BlockAssemblyEnv(gym.Env):
                 self.next_ep_long_reset = True
                 self.reconnect_to_robot()
             time.sleep(1.0 / self.hz)
-        next_obs, next_tcp_pose, next_r_force, next_tcp_vel = self.compute_obs()
+        next_obs, next_tcp_pose = self.compute_obs()
         
         self.steps += 1
         self.total_steps += 1
@@ -553,17 +569,17 @@ class BlockAssemblyEnv(gym.Env):
 
         r_force = jnp.array(self.rtde_r.getActualTCPForce())
         l_force = jnp.array(self.another_rtde_r.getActualTCPForce())
-
-        r_hand_force = jnp.array(self.hand.get_hand_force())
-        l_hand_force = jnp.array(self.another_hand.get_hand_force())
+        if self.control_hand:
+            r_hand_force = jnp.array(np.clip(self.hand.get_hand_force(), -50, 50))
+            l_hand_force = jnp.array(np.clip(self.another_hand.get_hand_force(), -50, 50))
 
         state_observation = {
             "tcp_pose": tcp_pose,
-            "tcp_vel": r_speed,
-            "r_force": r_force,#force&torque
-            "l_force": l_force,
-            "r_hand_force": r_hand_force,
-            "l_hand_force": l_hand_force
+            # "tcp_vel": r_speed,
+            # "r_force": r_force,#force&torque
+            # "l_force": l_force,
+            # "r_hand_force": r_hand_force,
+            # "l_hand_force": l_hand_force
         }
         
         return state_observation
@@ -572,7 +588,7 @@ class BlockAssemblyEnv(gym.Env):
         images = self.get_img()
         state_observation = self.get_state()
 
-        return copy.deepcopy(dict(images=images, state=state_observation)), jax.device_get(state_observation["tcp_pose"]), jax.device_get(state_observation["r_force"]), jax.device_get(state_observation["tcp_vel"])
+        return copy.deepcopy(dict(images=images, state=state_observation)), jax.device_get(state_observation["tcp_pose"])#, jax.device_get(state_observation["r_force"]), jax.device_get(state_observation["tcp_vel"])
 
     def reset_within_certain_range(self):
         random_rot_min = 0
@@ -636,26 +652,27 @@ class BlockAssemblyEnv(gym.Env):
                 break
 
     def reset(self, **kwargs):
-        if self.first_reset_flag|self.next_ep_long_reset:
-            input("please move the robot to the start position, press enter to continue...")
-                
-            while True:
-                reset_flag = input("reset successfully?")
-                while reset_flag not in ["1", "0"]:
+        if self.control_hand:
+            if self.first_reset_flag|self.next_ep_long_reset:
+                input("please move the robot to the start position, press enter to continue...")
+                    
+                while True:
                     reset_flag = input("reset successfully?")
-                if reset_flag == "1":
-                    break
-                else:
-                    self.reconnect_to_robot()
-                    self.reset_real_robot()
-            self.first_reset_flag = False
-            self.next_ep_long_reset = False
+                    while reset_flag not in ["1", "0"]:
+                        reset_flag = input("reset successfully?")
+                    if reset_flag == "1":
+                        break
+                    else:
+                        self.reconnect_to_robot()
+                        self.reset_real_robot()
+                self.first_reset_flag = False
+                self.next_ep_long_reset = False
         self.reconnect_to_robot()    
         self.rtde_c.moveJ(self.init_dof_pos0, 0.05, 0.5)
         self.another_rtde_c.moveJ(self.init_dof_pos1, 0.05, 0.5)
         self.reset_within_certain_range()
         
-        obs, _, _, _ = self.compute_obs()
+        obs, _ = self.compute_obs()
         if self.evaluate != 1:
             wandb.log({'mujoco_reward/reward': self.episode_reward}, step=self.total_steps)
         if self.sequence_random_reset:
@@ -679,13 +696,14 @@ class BlockAssemblyEnv(gym.Env):
             else:
                 self.intervene_ep_record_list.append(0)
             self.intervene_flag = False
-        left_hand_force = np.array(self.another_hand.get_hand_force())
-        self.x_force_positive = left_hand_force[1:4][abs(left_hand_force[1:4]) < 100].mean() if len(left_hand_force[1:4][abs(left_hand_force[1:4]) < 100]) > 0 else left_hand_force[1:4].mean()#x正方向的力 
-        self.x_force_negative = -left_hand_force[-2] #x负方向的力
-        
-        self.last_x_force_positive = copy.deepcopy(self.x_force_positive)
-        self.last_x_force_negative = copy.deepcopy(self.x_force_negative)
-        self.last_left_hand_force = copy.deepcopy(left_hand_force)
+        if self.control_hand:
+            left_hand_force = np.array(self.another_hand.get_hand_force())
+            self.x_force_positive = left_hand_force[1:4][abs(left_hand_force[1:4]) < 100].mean() if len(left_hand_force[1:4][abs(left_hand_force[1:4]) < 100]) > 0 else left_hand_force[1:4].mean()#x正方向的力 
+            self.x_force_negative = -left_hand_force[-2] #x负方向的力
+            
+            self.last_x_force_positive = copy.deepcopy(self.x_force_positive)
+            self.last_x_force_negative = copy.deepcopy(self.x_force_negative)
+            self.last_left_hand_force = copy.deepcopy(left_hand_force)
         return obs, {}
 
     
@@ -924,8 +942,14 @@ if __name__ == '__main__':
     """
     env = BlockAssemblyEnv(False, 1)
     while True:
-        print(env.hand.get_hand_force())
+        print(env.rtde_r.getActualTCPForce())
         time.sleep(0.1)
+        a = input("press enter to continue:")
+        if a == "r":
+            env.reconnect_to_robot()
+    # while True:
+    #     print(env.hand.get_hand_force())
+    #     time.sleep(0.1)
     # from examples.experiments.block_assembly.spacemouse import pyspacemouse
     # pyspacemouse.open()
     # while True:

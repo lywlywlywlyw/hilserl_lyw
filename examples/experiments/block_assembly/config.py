@@ -15,7 +15,8 @@ from serl_launcher.wrappers.reward_classifer import MultiCameraBinaryRewardClass
 import numpy as np
 class TrainConfig(DefaultTrainingConfig):
     image_keys = ['shelf', 'ground']
-    proprio_keys = ['tcp_pose', 'tcp_vel', 'r_force', 'l_force', 'r_hand_force', 'l_hand_force']
+    proprio_keys = ['tcp_pose']#, 'l_force', 'r_hand_force', 'l_hand_force']#, 'tcp_vel' , 'r_force'
+
     classifier_keys = ['shelf', 'ground']
     discount = 0.97
     buffer_period = 1000

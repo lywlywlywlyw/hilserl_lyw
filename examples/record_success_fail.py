@@ -147,9 +147,11 @@ def main(_):
     
         
 if __name__ == "__main__":
-    # app.run(main)
-    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo.pkl", "rb") as f:
+    app.run(main)
+    
+    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35.pkl", "rb") as f:
     #     data_list = pkl.load(f)
+    #     print(data_list[0]["observations"]["state"].shape)
     #     # import cv2
     #     # import matplotlib.pyplot as plt
     #     # img_rgb = cv2.cvtColor(data[0]["observations"]["images"]["shelf"].astype(np.uint8), cv2.COLOR_BGR2RGB)
@@ -190,19 +192,34 @@ if __name__ == "__main__":
     #         if data["dones"]:
     #             print(cnt)
     #             cnt = 0
-    success = []
-    failure = []
-    for cnt in range(1000, 10000, 1000):
-        with open(f"/home/admin01/lyw_2/hil-serl_original/checkpoints/20251224_0017/buffer/transitions_{cnt}.pkl", "rb") as f:
-            data_list = pkl.load(f)
-            for data in data_list:
-                if data["rewards"] == 1.0:
-                    success.append(data)
-                else:
-                    failure.append(data)
+    # success = []
+    # failure = []
+    # for cnt in range(1000, 10000, 1000):
+    #     with open(f"/home/admin01/lyw_2/hil-serl_original/checkpoints/20251224_0017/buffer/transitions_{cnt}.pkl", "rb") as f:
+    #         data_list = pkl.load(f)
+    #         for data in data_list:
+    #             if data["rewards"] == 1.0:
+    #                 success.append(data)
+    #             else:
+    #                 failure.append(data)
     
-    curr_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    with open(f"/home/admin01/lyw_2/hil-serl_original/examples/classifier_data/blockassembly_{len(success)}_success_images_{curr_time}.pkl", "wb") as f:
-        pkl.dump(success, f)
-    with open(f"/home/admin01/lyw_2/hil-serl_original/examples/classifier_data/blockassembly_{len(failure)}_failure_images_{curr_time}.pkl", "wb") as f:
-        pkl.dump(failure, f)
+    # curr_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # with open(f"/home/admin01/lyw_2/hil-serl_original/examples/classifier_data/blockassembly_{len(success)}_success_images_{curr_time}.pkl", "wb") as f:
+    #     pkl.dump(success, f)
+    # with open(f"/home/admin01/lyw_2/hil-serl_original/examples/classifier_data/blockassembly_{len(failure)}_failure_images_{curr_time}.pkl", "wb") as f:
+    #     pkl.dump(failure, f)
+    # for cnt in range(1000, 10000, 1000):
+    #     with open(f"/home/admin01/lyw_2/hil-serl_original/checkpoints/20251224_1416/demo_buffer/transitions_{cnt}.pkl", "rb") as f:
+    #         data_list = pkl.load(f)
+    #         print(len(data_list))
+    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35_fixed.pkl", "rb") as f:
+    #     data_list = pkl.load(f)
+    #     for data in data_list:
+    #         if data["observations"]["state"].shape[1] != 19:
+    #             print(data["observations"]["state"].shape)
+        # final_list = []
+        # for data in data_list:
+        #     data["observations"]["state"] = data["observations"]["state"][:19]
+        #     final_list.append(data)
+        # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35_fixed.pkl", "wb") as f:
+        #     pkl.dump(final_list, f)

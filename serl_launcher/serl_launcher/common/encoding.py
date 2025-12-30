@@ -44,7 +44,7 @@ class EncodingWrapper(nn.Module):
                         image = rearrange(image, "B T H W C -> B H W (T C)")
 
             image = self.encoder[image_key](image, train=train, encode=not is_encoded)
-
+            # print(f"{image_key}: {image}")
             if stop_gradient:
                 image = jax.lax.stop_gradient(image)
 

@@ -132,7 +132,6 @@ class Policy(nn.Module):
             obs_enc = observations
         else:
             obs_enc = self.encoder(observations, train=train, stop_gradient=True)
-
         outputs = self.network(obs_enc, train=train)
 
         means = nn.Dense(self.action_dim, kernel_init=default_init())(outputs)
