@@ -13,7 +13,7 @@ from tqdm import tqdm
 from serl_launcher.vision.resnet_v1 import resnetv1_configs, PreTrainedResNetEncoder
 from serl_launcher.common.encoding import EncodingWrapper
 
-from flax.core import freeze, unfreeze
+
 class BinaryClassifier(nn.Module):
     encoder_def: nn.Module
     hidden_dim: int = 256
@@ -118,8 +118,7 @@ def create_classifier(
     print(
         f"Loaded {param_count/1e6}M parameters from ResNet-10 pretrained on ImageNet-1K"
     )
-    # new_params = classifier.params
-    new_params = unfreeze(classifier.params)
+    new_params = classifier.params
     for image_key in image_keys:
         if "pretrained_encoder" in new_params["encoder_def"][f"encoder_{image_key}"]:
             for k in new_params["encoder_def"][f"encoder_{image_key}"][
@@ -130,7 +129,7 @@ def create_classifier(
                         "pretrained_encoder"
                     ][k] = encoder_params[k]
                     print(f"replaced {k} in encoder_{image_key}")
-    new_params = freeze(new_params)
+
     classifier = classifier.replace(params=new_params)
     return classifier
 

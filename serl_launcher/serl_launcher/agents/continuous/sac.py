@@ -463,92 +463,6 @@ class SACAgent(flax.struct.PyTreeNode):
         policy_network_kwargs["activate_final"] = True
         critic_network_kwargs["activate_final"] = True
 
-        if encoder_type == "resnet":
-            from serl_launcher.vision.resnet_v1 import resnetv1_configs
-
-            encoders = {
-                image_key: resnetv1_configs["resnetv1-10"](
-                    pooling_method="spatial_learned_embeddings",
-                    num_spatial_blocks=8,
-                    bottleneck_dim=256,
-                    name=f"encoder_{image_key}",
-                )
-                for image_key in image_keys
-            }
-        elif encoder_type == "resnet-pretrained":
-            from serl_launcher.vision.resnet_v1 import (
-                PreTrainedResNetEncoder,
-                resnetv1_configs,
-            )
-
-            pretrained_encoders0 = {image_key: resnetv1_configs["resnetv1-10-frozen"](
-                pre_pooling=True,
-                name="pretrained_encoder",
-            ) for image_key in image_keys}
-            encoders0 = {
-                image_key: PreTrainedResNetEncoder(
-                    pooling_method="spatial_learned_embeddings",
-                    num_spatial_blocks=8,
-                    bottleneck_dim=256,
-                    pretrained_encoder=pretrained_encoders0[image_key],
-                    name=f"encoder_{image_key}",
-                )
-                for image_key in image_keys
-            }
-
-            pretrained_encoders1 = {image_key: resnetv1_configs["resnetv1-10-frozen"](
-                pre_pooling=True,
-                name="pretrained_encoder",
-            ) for image_key in image_keys}
-            encoders1 = {
-                image_key: PreTrainedResNetEncoder(
-                    pooling_method="spatial_learned_embeddings",
-                    num_spatial_blocks=8,
-                    bottleneck_dim=256,
-                    pretrained_encoder=pretrained_encoders1[image_key],
-                    name=f"encoder_{image_key}",
-                )
-                for image_key in image_keys
-            }
-        else:
-            raise NotImplementedError(f"Unknown encoder type: {encoder_type}")
-
-        encoder_def0 = EncodingWrapper(
-            encoder=encoders0,
-            use_proprio=use_proprio,
-            enable_stacking=True,
-            image_keys=image_keys,
-        )
-        encoder_def1 = EncodingWrapper(
-            encoder=encoders1,
-            use_proprio=use_proprio,
-            enable_stacking=True,
-            image_keys=image_keys,
-        )
-
-
-        encoders = {
-            "critic": encoder_def0,
-            "actor": encoder_def1,
-        }
-
-        # Define networks
-        critic_backbone = partial(MLP, **critic_network_kwargs)
-        critic_backbone = ensemblize(critic_backbone, critic_ensemble_size)(
-            name="critic_ensemble"
-        )
-        critic_def = partial(
-            Critic, encoder=encoders["critic"], network=critic_backbone
-        )(name="critic")
-
-        policy_def = Policy(
-            encoder=encoders["actor"],
-            network=MLP(**policy_network_kwargs),
-            action_dim=actions.shape[-1],
-            **policy_kwargs,
-            name="actor",
-        )
-######################
         # if encoder_type == "resnet":
         #     from serl_launcher.vision.resnet_v1 import resnetv1_configs
 
@@ -567,16 +481,31 @@ class SACAgent(flax.struct.PyTreeNode):
         #         resnetv1_configs,
         #     )
 
-        #     pretrained_encoder = resnetv1_configs["resnetv1-10-frozen"](
+        #     pretrained_encoders0 = {image_key: resnetv1_configs["resnetv1-10-frozen"](
         #         pre_pooling=True,
         #         name="pretrained_encoder",
-        #     )
-        #     encoders = {
+        #     ) for image_key in image_keys}
+        #     encoders0 = {
         #         image_key: PreTrainedResNetEncoder(
         #             pooling_method="spatial_learned_embeddings",
         #             num_spatial_blocks=8,
         #             bottleneck_dim=256,
-        #             pretrained_encoder=pretrained_encoder,
+        #             pretrained_encoder=pretrained_encoders0[image_key],
+        #             name=f"encoder_{image_key}",
+        #         )
+        #         for image_key in image_keys
+        #     }
+
+        #     pretrained_encoders1 = {image_key: resnetv1_configs["resnetv1-10-frozen"](
+        #         pre_pooling=True,
+        #         name="pretrained_encoder",
+        #     ) for image_key in image_keys}
+        #     encoders1 = {
+        #         image_key: PreTrainedResNetEncoder(
+        #             pooling_method="spatial_learned_embeddings",
+        #             num_spatial_blocks=8,
+        #             bottleneck_dim=256,
+        #             pretrained_encoder=pretrained_encoders1[image_key],
         #             name=f"encoder_{image_key}",
         #         )
         #         for image_key in image_keys
@@ -584,16 +513,23 @@ class SACAgent(flax.struct.PyTreeNode):
         # else:
         #     raise NotImplementedError(f"Unknown encoder type: {encoder_type}")
 
-        # encoder_def = EncodingWrapper(
-        #     encoder=encoders,
+        # encoder_def0 = EncodingWrapper(
+        #     encoder=encoders0,
+        #     use_proprio=use_proprio,
+        #     enable_stacking=True,
+        #     image_keys=image_keys,
+        # )
+        # encoder_def1 = EncodingWrapper(
+        #     encoder=encoders1,
         #     use_proprio=use_proprio,
         #     enable_stacking=True,
         #     image_keys=image_keys,
         # )
 
+
         # encoders = {
-        #     "critic": encoder_def,
-        #     "actor": encoder_def,
+        #     "critic": encoder_def0,
+        #     "actor": encoder_def1,
         # }
 
         # # Define networks
@@ -612,6 +548,70 @@ class SACAgent(flax.struct.PyTreeNode):
         #     **policy_kwargs,
         #     name="actor",
         # )
+######################
+        if encoder_type == "resnet":
+            from serl_launcher.vision.resnet_v1 import resnetv1_configs
+
+            encoders = {
+                image_key: resnetv1_configs["resnetv1-10"](
+                    pooling_method="spatial_learned_embeddings",
+                    num_spatial_blocks=8,
+                    bottleneck_dim=256,
+                    name=f"encoder_{image_key}",
+                )
+                for image_key in image_keys
+            }
+        elif encoder_type == "resnet-pretrained":
+            from serl_launcher.vision.resnet_v1 import (
+                PreTrainedResNetEncoder,
+                resnetv1_configs,
+            )
+
+            pretrained_encoder = resnetv1_configs["resnetv1-10-frozen"](
+                pre_pooling=True,
+                name="pretrained_encoder",
+            )
+            encoders = {
+                image_key: PreTrainedResNetEncoder(
+                    pooling_method="spatial_learned_embeddings",
+                    num_spatial_blocks=8,
+                    bottleneck_dim=256,
+                    pretrained_encoder=pretrained_encoder,
+                    name=f"encoder_{image_key}",
+                )
+                for image_key in image_keys
+            }
+        else:
+            raise NotImplementedError(f"Unknown encoder type: {encoder_type}")
+
+        encoder_def = EncodingWrapper(
+            encoder=encoders,
+            use_proprio=use_proprio,
+            enable_stacking=True,
+            image_keys=image_keys,
+        )
+
+        encoders = {
+            "critic": encoder_def,
+            "actor": encoder_def,
+        }
+
+        # Define networks
+        critic_backbone = partial(MLP, **critic_network_kwargs)
+        critic_backbone = ensemblize(critic_backbone, critic_ensemble_size)(
+            name="critic_ensemble"
+        )
+        critic_def = partial(
+            Critic, encoder=encoders["critic"], network=critic_backbone
+        )(name="critic")
+
+        policy_def = Policy(
+            encoder=encoders["actor"],
+            network=MLP(**policy_network_kwargs),
+            action_dim=actions.shape[-1],
+            **policy_kwargs,
+            name="actor",
+        )
 #################
         temperature_def = GeqLagrangeMultiplier(
             init_value=temperature_init,

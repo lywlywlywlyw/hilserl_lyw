@@ -16,20 +16,13 @@ from serl_launcher.vision.data_augmentations import batched_random_crop
 from serl_launcher.networks.reward_classifier import create_classifier
 
 from experiments.mappings import CONFIG_MAPPING
-import torch
+
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string("exp_name", "blockassembly", "Name of experiment corresponding to folder.")
-flags.DEFINE_integer("num_epochs", 100000, "Number of training epochs.")
+flags.DEFINE_integer("num_epochs", 150, "Number of training epochs.")
 flags.DEFINE_integer("batch_size", 256, "Batch size.")
 
-import signal, sys
-
-def handler(sig, frame):
-    torch.cuda.empty_cache()
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, handler)
 
 def main(_):
     assert FLAGS.exp_name in CONFIG_MAPPING, 'Experiment folder not found.'
@@ -157,12 +150,12 @@ def main(_):
             f"Epoch: {epoch+1}, Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}"
         )
 
-        checkpoints.save_checkpoint(
-            os.path.join(os.getcwd(), "classifier_ckpt/"),
-            classifier,
-            step=epoch,
-            overwrite=True,
-        )
+    checkpoints.save_checkpoint(
+        os.path.join(os.getcwd(), "classifier_ckpt/"),
+        classifier,
+        step=FLAGS.num_epochs,
+        overwrite=True,
+    )
     
 
 if __name__ == "__main__":

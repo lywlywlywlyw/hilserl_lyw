@@ -6,16 +6,13 @@ import torch
 import time
 import rtde_control
 import rtde_receive
-from examples.experiments.block_assembly.inspire_hand_module_modbus_lyw import Hand
+from experiments.block_assembly.inspire_hand_module_modbus_lyw import Hand
 import redis
-from examples.experiments.block_assembly.rl_distill import *
-from examples.experiments.block_assembly.rl_distill_max_likelihood import *
 
 from scipy.spatial.transform import Rotation as R
 import gymnasium as gym
 import pickle
 import trimesh as tm
-from pointnet2_ops import pointnet2_utils
 # from pynput import keyboard
 import wandb
 import datetime
@@ -82,7 +79,7 @@ class BlockAssemblyEnv(gym.Env):
                     {
                         "tcp_pose": gym.spaces.Box(low=-1, high=1, shape=(7,), dtype=np.float32),
                         # "tcp_vel": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
-                        # "r_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
+                        "r_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
                         # "l_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
                         # "r_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
                         # "l_hand_force": gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32),
@@ -103,9 +100,9 @@ class BlockAssemblyEnv(gym.Env):
         # control hand
         self.control_hand = False
         # baseur和world的关系
-        arm_initial_pos = torch.tensor([-0.8625, -0.2400,  1.3946]).to(self.device)
+        arm_initial_pos = torch.tensor([0.0,0.0,0.0]).to(self.device)#torch.tensor([-0.8625, -0.2400,  1.3946]).to(self.device)
         another_arm_initial_pos = torch.tensor([-0.8625,  0.2400,  1.3946]).to(self.device)
-        arm_initial_rot = torch.tensor([ 3.3444e-06, -9.2388e-01,  3.8268e-01, -1.3853e-06]).to(self.device)
+        arm_initial_rot = torch.tensor([ -0.653, -0.653, 0.271, -0.271]).to(self.device)#torch.tensor([ 3.3444e-06, -9.2388e-01,  3.8268e-01, -1.3853e-06]).to(self.device)
         another_arm_initial_rot = torch.tensor([-3.3444e-06, -9.2388e-01, -3.8268e-01, -1.3853e-06]).to(self.device)
 
         world2arm_trans_right = arm_initial_pos
@@ -113,16 +110,16 @@ class BlockAssemblyEnv(gym.Env):
         world2arm_trans_left = another_arm_initial_pos
         world2arm_rot_left = another_arm_initial_rot
         
-        r_basemy2baseur_quat = torch.tensor([ 1.06572167e-03 ,-5.62792849e-04,  7.09452728e-01 ,-7.04751995e-01]).to(self.device)#torch.tensor([-3.60496599e-05, -5.34978704e-06, 7.07114340e-01, -7.07099221e-01]).to(self.device)
-        r_basemy2baseur_pos = torch.tensor( [-0.02776959, -0.02058528,  0.01197951]).to(self.device)#torch.tensor([-0.02073179, 0.01909007, 0.00689948]).to(self.device)
+        r_basemy2baseur_quat = torch.tensor([0.0,0.0,1.0,0.0]).to(self.device)#torch.tensor([ 1.06572167e-03 ,-5.62792849e-04,  7.09452728e-01 ,-7.04751995e-01]).to(self.device)#torch.tensor([-3.60496599e-05, -5.34978704e-06, 7.07114340e-01, -7.07099221e-01]).to(self.device)
+        r_basemy2baseur_pos = torch.tensor( [0.0,0.0,0.0]).to(self.device)#torch.tensor( [-0.02776959, -0.02058528,  0.01197951]).to(self.device)#torch.tensor([-0.02073179, 0.01909007, 0.00689948]).to(self.device)
         r_world2basemy_rot = world2arm_rot_right#world2arm_rot_left
         r_world2basemy_pos = world2arm_trans_right#world2arm_trans_left
         self.r_worldold2baseur_pos = self.quat_apply(r_world2basemy_rot, r_basemy2baseur_pos) + r_world2basemy_pos
         self.r_worldold2baseur_rot = self.quat_mul(r_world2basemy_rot, r_basemy2baseur_quat)
         self.r_world2baseur_rot = self.quat_mul(torch.tensor([-0.70710678, 0, 0, 0.70710678]).to(self.device), self.r_worldold2baseur_rot)
         self.r_world2baseur_pos = self.quat_apply(torch.tensor([-0.70710678, 0, 0, 0.70710678]).to(self.device), self.r_worldold2baseur_pos)
-        l_basemy2baseur_quat = torch.tensor([-3.60496599e-05, -5.34978704e-06, 7.07114340e-01, -7.07099221e-01]).to(self.device)
-        l_basemy2baseur_pos = torch.tensor([-0.02073179, 0.01909007, 0.00689948]).to(self.device)
+        l_basemy2baseur_quat = torch.tensor([0.0,0.0,1.0,0.0]).to(self.device)#torch.tensor([-3.60496599e-05, -5.34978704e-06, 7.07114340e-01, -7.07099221e-01]).to(self.device)
+        l_basemy2baseur_pos = torch.tensor([0.0,0.0,0.0]).to(self.device)#torch.tensor([-0.02073179, 0.01909007, 0.00689948]).to(self.device)
         l_world2basemy_rot = world2arm_rot_left
         l_world2basemy_pos = world2arm_trans_left
         self.l_world2baseur_pos = self.quat_apply(l_world2basemy_rot, l_basemy2baseur_pos) + l_world2basemy_pos
@@ -140,11 +137,11 @@ class BlockAssemblyEnv(gym.Env):
             self.init_baseur2tcp_pos0 = np.array([-0.2722, -0.6226,  0.1909])
             self.init_baseur2tcp_quat0 = np.array([ 0.0239, -0.8168,  0.4995,  0.2878])
         else:
-            self.init_dof_pos0 = np.array([1.017919898033142, -0.49334746996034795, 0.6514382362365723, 1.0057929754257202, 2.193951368331909, 2.9802491664886475])
-            self.init_dof_pos1 = np.array([-1.0199416319476526, -2.6652448813067835, -0.7377594153033655, -3.9303649107562464, -2.2327707449542444, 0.38903677463531494])
+            self.init_dof_pos0 = np.array([0.8021015524864197, -0.9664557615863245, 1.602889060974121, 0.36605024337768555, 2.1278767585754395, 2.7343616485595703])
+            self.init_dof_pos1 = np.array([-0.8362057844745081, -2.1636832396136683, -1.6822922865497034, -3.3790248076068323, -2.131122414265768, -0.1285031477557581])
             # self.init_hand_pos = np.array([5.317746399668977e-06, 1.0040700435638428, 0.9746702313423157, 1.01011061668396, 0.10482560843229294, 1.1795626878738403])
-            self.init_baseur2tcp_pos0 = np.array([-0.3160, -0.6288,  0.1297])
-            self.init_baseur2tcp_quat0 = np.array([-0.2374, -0.9020,  0.0763,  0.3523])
+            self.init_baseur2tcp_pos0 = np.array([-0.3110, -0.4150,  0.0962])
+            self.init_baseur2tcp_quat0 = np.array([-0.2373, -0.8941,  0.0788,  0.3716])
         
         self.init_world2tcp_pos0 = self.quat_apply(self.r_world2baseur_rot, torch.from_numpy(self.init_baseur2tcp_pos0).float().to(self.device)) + self.r_world2baseur_pos
         self.init_world2tcp_quat0 = self.quat_mul(self.r_world2baseur_rot, torch.from_numpy(self.init_baseur2tcp_quat0).float().to(self.device))
@@ -154,8 +151,8 @@ class BlockAssemblyEnv(gym.Env):
         # 世界坐标系下的安全范围（y轴向右）
         self.safety_box_size_min = np.array([-self.random_pos_range-0.01, -self.random_pos_range-0.01, -0.1-0.03, -self.random_rot_range-0.05, -self.random_rot_range-0.05, -self.random_rot_range-0.05])
         self.safety_box_size_max = np.array([self.random_pos_range+0.01, self.random_pos_range+0.01, 0.01, self.random_rot_range+0.05, self.random_rot_range+0.05, self.random_rot_range+0.05])
-        self.random_pos_range = 0
-        self.random_rot_range = 0
+        # self.random_pos_range = 0
+        # self.random_rot_range = 0
         # 步长# set same as hilserl peg insertion
         self.action_pos_range_value = 0.005
         self.action_rot_range_value = 0.05
@@ -165,7 +162,7 @@ class BlockAssemblyEnv(gym.Env):
         self.max_episode_steps = 200
         if not fake_env:
             
-            from examples.experiments.block_assembly.spacemouse.spacemouse_expert import SpaceMouseExpert
+            from experiments.block_assembly.spacemouse.spacemouse_expert import SpaceMouseExpert
             self.expert = SpaceMouseExpert()
             self.episode_reward = 0
             file = open('/home/admin01/lyw_2/control_ur5/replay_record.pkl', 'rb')
@@ -441,6 +438,7 @@ class BlockAssemblyEnv(gym.Env):
                 if self.stop_flag == False:
                     # self.rtde_c.servoJ(arm_pos, 0.4*(1 - np.clip(3*abs(delta_p), 0, 1)), 0.1*(1 - np.clip(3*abs(delta_p), 0, 1)), (1.0 / self.hz), 0.2, 600)
                     self.rtde_c.servoJ(arm_pos, 0.4, 0.1, (1.0 / self.hz), 0.2, 600)
+                    # self.rtde_c.moveJ(arm_pos, 0.1, 1)
 
             except RuntimeError as e:
                 print("step_error:", e)
@@ -576,7 +574,7 @@ class BlockAssemblyEnv(gym.Env):
         state_observation = {
             "tcp_pose": tcp_pose,
             # "tcp_vel": r_speed,
-            # "r_force": r_force,#force&torque
+            "r_force": r_force,#force&torque
             # "l_force": l_force,
             # "r_hand_force": r_hand_force,
             # "l_hand_force": l_hand_force
@@ -667,11 +665,11 @@ class BlockAssemblyEnv(gym.Env):
                         self.reset_real_robot()
                 self.first_reset_flag = False
                 self.next_ep_long_reset = False
-        self.reconnect_to_robot()    
+        self.reconnect_to_robot()   
+        obs, _ = self.compute_obs() 
         self.rtde_c.moveJ(self.init_dof_pos0, 0.05, 0.5)
         self.another_rtde_c.moveJ(self.init_dof_pos1, 0.05, 0.5)
         self.reset_within_certain_range()
-        
         obs, _ = self.compute_obs()
         if self.evaluate != 1:
             wandb.log({'mujoco_reward/reward': self.episode_reward}, step=self.total_steps)
@@ -904,10 +902,10 @@ class BlockAssemblyEnv(gym.Env):
         lego_points = torch.from_numpy(np.array(lego_points)/100).float().to(device)
         return lego_points
     
-    def sample_points_furthest(self, points, sample_num=1000):
-        sampled_points_id = pointnet2_utils.furthest_point_sample(points.reshape(1, *points.shape), sample_num)
-        sampled_points = points.index_select(0, sampled_points_id[0].long())
-        return sampled_points
+    # def sample_points_furthest(self, points, sample_num=1000):
+    #     sampled_points_id = pointnet2_utils.furthest_point_sample(points.reshape(1, *points.shape), sample_num)
+    #     sampled_points = points.index_select(0, sampled_points_id[0].long())
+    #     return sampled_points
     
     def reconnect_to_robot(self, max_retries=100, retry_delay=1.0):
         self.rtde_c.disconnect()
@@ -940,26 +938,32 @@ if __name__ == '__main__':
     initial_dof_pos0: [1.054001808166504, -0.4473608175860804, 0.2894291877746582, 0.9450591802597046, 1.5849055051803589, 2.3439486026763916]
     action0: [-1.81547987 -2.34962344 -1.2982676  -0.34044909  1.43396115 -0.59965008]
     """
-    env = BlockAssemblyEnv(False, 1)
-    while True:
-        print(env.rtde_r.getActualTCPForce())
-        time.sleep(0.1)
-        a = input("press enter to continue:")
-        if a == "r":
-            env.reconnect_to_robot()
+    # env = BlockAssemblyEnv(False, 1)
+    # while True:
+    #     print(env.rtde_r.getActualTCPForce())
+    #     time.sleep(0.1)
+    #     a = input("press enter to continue:")
+    #     if a == "r":
+    #         env.reconnect_to_robot()
+    # env = BlockAssemblyEnv(False, 1)
+    # fk_pose = env.cal_fk_real_robot("right")
+    # print("fk_pose:", fk_pose)
+    # ik_pos = env.cal_ik_real_robot(fk_pose[:3], fk_pose[3:6], env.rtde_r.getActualQ())
+    # print("ik_pos:", ik_pos)
+    # print("2fk_pos:", env.rtde_c.getForwardKinematics(ik_pos, [0,0,0,0,0,0]))
     # while True:
     #     print(env.hand.get_hand_force())
     #     time.sleep(0.1)
-    # from examples.experiments.block_assembly.spacemouse import pyspacemouse
+    # from experiments.block_assembly.spacemouse import pyspacemouse
     # pyspacemouse.open()
-    # while True:
-    #     state = pyspacemouse.read_all()
-    #     state = state[0]
-    #     print("xyz:", state.x, state.y, state.z)
-    #     print("rpy:", state.roll, state.pitch, state.yaw)
-    #     print("buttion:", state.buttons)
-    #     print("---------------------------")
-    #     time.sleep(0.1)
+    while True:
+        state = pyspacemouse.read_all()
+        state = state[0]
+        print("xyz:", state.x, state.y, state.z)
+        print("rpy:", state.roll, state.pitch, state.yaw)
+        print("buttion:", state.buttons)
+        print("---------------------------")
+        time.sleep(0.1)
     # import pickle as pkl
     # with open("/home/admin01/lyw_2/hil-serl_original/examples/episode_record.pkl", "rb") as f:
     #     data_list = pkl.load(f)
@@ -995,6 +999,5 @@ if __name__ == '__main__':
     #     # cv2.imshow("img", img_rgb)
     #     # cv2.waitKey(0)
     #     cnt += 1
-
 
 

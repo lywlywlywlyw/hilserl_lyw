@@ -15,7 +15,7 @@ from serl_launcher.wrappers.reward_classifer import MultiCameraBinaryRewardClass
 import numpy as np
 class TrainConfig(DefaultTrainingConfig):
     image_keys = ['shelf', 'ground']
-    proprio_keys = ['tcp_pose']#, 'l_force', 'r_hand_force', 'l_hand_force']#, 'tcp_vel' , 'r_force'
+    proprio_keys = ['tcp_pose', 'r_force']#, 'l_force', 'r_hand_force', 'l_hand_force']#, 'tcp_vel' , 'r_force'
 
     classifier_keys = ['shelf', 'ground']
     discount = 0.97
@@ -24,7 +24,7 @@ class TrainConfig(DefaultTrainingConfig):
     encoder_type = "resnet-pretrained"
     setup_mode = "single-arm-fixed-gripper"
     
-    def get_environment(self, fake_env=False, evaluate=False, save_video=False, classifer=False):
+    def get_environment(self, fake_env=True, evaluate=False, save_video=False, classifer=False):
         env = BlockAssemblyEnv(fake_env, evaluate, save_video, classifer)
         env = SERLObsWrapper(env, proprio_keys=self.proprio_keys)
         env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
@@ -37,7 +37,7 @@ class TrainConfig(DefaultTrainingConfig):
 
         def reward_func(obs):
             sigmoid = lambda x: 1 / (1 + jnp.exp(-x))
-            return int(sigmoid(classifier(obs)) > 0.7)# and obs["state"][0, 0] > 0.4
+            return int(jax.device_get(sigmoid(classifier(obs)) > 0.7)[0])# and obs["state"][0, 0] > 0.4
         
         env = MultiCameraBinaryRewardClassifierWrapper(env, reward_func)
         return env

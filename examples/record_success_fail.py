@@ -194,8 +194,8 @@ if __name__ == "__main__":
     #             cnt = 0
     # success = []
     # failure = []
-    # for cnt in range(1000, 10000, 1000):
-    #     with open(f"/home/admin01/lyw_2/hil-serl_original/checkpoints/20251224_0017/buffer/transitions_{cnt}.pkl", "rb") as f:
+    # for cnt in range(1000, 7000, 1000):
+    #     with open(f"/home/admin01/lyw_2/hil-serl_original/checkpoints/20251231_1926/buffer/transitions_{cnt}.pkl", "rb") as f:
     #         data_list = pkl.load(f)
     #         for data in data_list:
     #             if data["rewards"] == 1.0:
@@ -217,9 +217,9 @@ if __name__ == "__main__":
     #     for data in data_list:
     #         if data["observations"]["state"].shape[1] != 19:
     #             print(data["observations"]["state"].shape)
-        # final_list = []
-        # for data in data_list:
-        #     data["observations"]["state"] = data["observations"]["state"][:19]
-        #     final_list.append(data)
-        # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35_fixed.pkl", "wb") as f:
-        #     pkl.dump(final_list, f)
+    #     final_list = []
+    #     for data in data_list:
+    #         data["observations"]["state"] = data["observations"]["state"][:19]
+    #         final_list.append(data)
+    #     with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35_fixed.pkl", "wb") as f:
+    #         pkl.dump(final_list, f)

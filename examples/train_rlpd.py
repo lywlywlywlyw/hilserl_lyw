@@ -42,8 +42,8 @@ flags.DEFINE_integer("seed", 42, "Random seed.")
 flags.DEFINE_boolean("learner", False, "Whether this is a learner.")
 flags.DEFINE_boolean("actor", False, "Whether this is an actor.")
 flags.DEFINE_string("ip", "localhost", "IP address of the learner.")
-flags.DEFINE_multi_string("demo_path", "/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-30_11-46-11.pkl", "Path to the demo data.")
-flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/checkpoints/20251225_1726333", "Path to save checkpoints.")#"/home/admin01/lyw_2/hil-serl_original/checkpoints/"+time.strftime("%Y%m%d_%H%M%S", time.localtime())
+flags.DEFINE_multi_string("demo_path", "/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-01_19-02-41.pkl", "Path to the demo data.")
+flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/checkpoints/20260101_2038", "Path to save checkpoints.")#"/home/admin01/lyw_2/hil-serl_original/checkpoints/"+time.strftime("%Y%m%d_%H%M%S", time.localtime())
 flags.DEFINE_integer("eval_checkpoint_step", 0 ,"Step to evaluate the checkpoint.")
 flags.DEFINE_integer("eval_n_trajs", 20, "Number of trajectories to evaluate.")
 flags.DEFINE_boolean("save_video", False, "Save video.")
@@ -98,7 +98,6 @@ def actor(agent, data_store, intvn_data_store, env, sampling_rng):
                     seed=key
                 )
                 actions = np.asarray(jax.device_get(actions))
-                actions = np.zeros(env.action_space.sample().shape) 
 
                 next_obs, reward, done, truncated, info = env.step(actions)
                 print("***************reward:", reward)
@@ -319,7 +318,7 @@ def learner(rng, agent, replay_buffer, demo_buffer, wandb_logger=None):
     else:
         train_critic_networks_to_update = frozenset({"critic", "grasp_critic"})
         train_networks_to_update = frozenset({"critic", "grasp_critic", "actor", "temperature"})
-
+    
     for step in tqdm.tqdm(
         range(start_step, config.max_steps), dynamic_ncols=True, desc="learner"
     ):
