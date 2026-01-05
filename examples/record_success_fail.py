@@ -21,7 +21,7 @@ flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/ch
 flags.DEFINE_integer("eval_checkpoint_step", 0 ,"Step to evaluate the checkpoint.")
 flags.DEFINE_integer("seed", 42, "Random seed.")
 flags.DEFINE_integer("record_demo", 1, "Record_demo.")
-
+flags.DEFINE_boolean("control_double_arm", False, "Control double arm.")
 """
 人工控制插入，成功时按spacemouse的按键
 """
@@ -40,7 +40,7 @@ def main(_):
         on_press=on_press)
     listener.start()
     assert FLAGS.exp_name in CONFIG_MAPPING, 'Experiment folder not found.'
-    config = CONFIG_MAPPING[FLAGS.exp_name]()
+    config = CONFIG_MAPPING[FLAGS.exp_name](FLAGS.control_double_arm)
     env = config.get_environment(fake_env=False, evaluate=True, classifer=(FLAGS.record_demo==0))
 
     if FLAGS.eval_checkpoint_step:

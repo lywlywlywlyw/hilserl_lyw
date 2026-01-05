@@ -128,6 +128,7 @@ class Policy(nn.Module):
     def __call__(
         self, observations: jnp.ndarray, temperature: float = 1.0, train: bool = False, non_squash_distribution: bool = False,
     ) -> distrax.Distribution:
+        
         if self.encoder is None:
             obs_enc = observations
         else:

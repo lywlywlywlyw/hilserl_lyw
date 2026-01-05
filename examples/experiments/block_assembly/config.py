@@ -24,8 +24,21 @@ class TrainConfig(DefaultTrainingConfig):
     encoder_type = "resnet-pretrained"
     setup_mode = "single-arm-fixed-gripper"
     
+    def __init__(
+        self,
+        control_double_arm
+    ):
+        super().__init__()
+
+        if control_double_arm is not None:
+            self.control_double_arm = control_double_arm
+        else:
+            self.control_double_arm = False
+        if self.control_double_arm:
+            self.proprio_keys = ['rtcp_pose', 'ltcp_pose', 'r_force', 'l_force']
+
     def get_environment(self, fake_env=True, evaluate=False, save_video=False, classifer=False):
-        env = BlockAssemblyEnv(fake_env, evaluate, save_video, classifer)
+        env = BlockAssemblyEnv(fake_env, self.control_double_arm, evaluate, save_video, classifer)
         env = SERLObsWrapper(env, proprio_keys=self.proprio_keys)
         env = ChunkingWrapper(env, obs_horizon=1, act_exec_horizon=None)
         classifier = load_classifier_func(

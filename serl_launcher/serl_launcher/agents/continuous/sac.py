@@ -197,11 +197,23 @@ class SACAgent(flax.struct.PyTreeNode):
         chex.assert_equal_shape([predicted_qs, target_qs])
         critic_loss = jnp.mean((predicted_qs - target_qs) ** 2)
 
+        real_predicted_qs = self.forward_critic(
+            batch["observations"], self.forward_policy(batch["observations"], rng=rng, train=False).sample(seed=rng), rng=rng, train=False
+        )
         info = {
             "critic_loss": critic_loss,
             "predicted_qs": jnp.mean(predicted_qs),
             "target_qs": jnp.mean(target_qs),
             "rewards": batch["rewards"].mean(),
+            "std_td_error" : jnp.std(predicted_qs - target_qs),
+            "mean_td_error" : jnp.mean(jnp.abs(predicted_qs - target_qs)),
+            "max_td_error" : jnp.max(jnp.abs(predicted_qs - target_qs)),
+            "ensemble_std": jnp.mean(jnp.std(predicted_qs, axis=0)),
+            "ensemble_gap": jnp.mean(jnp.abs(predicted_qs.max(axis=0) - predicted_qs.min(axis=0))),
+            "bootstrap_ratio": jnp.mean(jnp.where(target_q != 0, batch["rewards"] / target_q, batch["rewards"] / (target_q + 0.001))),
+            "demo_Q_delta": jnp.mean(predicted_qs[:, batch_size//2:] - real_predicted_qs[:, batch_size//2:]),
+            "mean_target_next_min_q": jnp.mean(target_next_min_q),
+            "std_target_next_min_q": jnp.std(target_next_min_q),
         }
 
         return critic_loss, info
@@ -232,6 +244,9 @@ class SACAgent(flax.struct.PyTreeNode):
             "actor_loss": actor_loss,
             "temperature": temperature,
             "entropy": -log_probs.mean(),
+            "mean_std": action_distributions.distribution.stddev().mean(),
+            "pred_qs": predicted_q.mean(),
+            "temperature_log_probs_mean": (temperature * log_probs).mean(),
         }
 
         return actor_loss, info
@@ -639,3 +654,22 @@ class SACAgent(flax.struct.PyTreeNode):
             agent = load_resnet10_params(agent, image_keys)
 
         return agent
+
+    def compute_kl_divergence(self, batch, last_agent: "SACAgent", seed: Optional[PRNGKey] = None) -> jnp.ndarray:
+        batch_size = batch["rewards"].shape[0]
+        chex.assert_tree_shape_prefix(batch, (batch_size,))
+
+        if self.config["image_keys"][0] not in batch["next_observations"]:
+            batch = _unpack(batch)
+        rng, aug_rng = jax.random.split(self.state.rng)
+        if "augmentation_function" in self.config.keys() and self.config["augmentation_function"] is not None:
+            batch = self.config["augmentation_function"](batch, aug_rng)
+
+        batch = batch.copy(
+            add_or_replace={"rewards": batch["rewards"] + self.config["reward_bias"]}
+        )
+        last_distribution = last_agent.forward_policy(batch["observations"], rng=seed, train=False)
+        new_distribution = self.forward_policy(batch["observations"], rng=seed, train=False)
+        return jnp.mean(
+            last_distribution.kl_divergence(new_distribution)
+        )
