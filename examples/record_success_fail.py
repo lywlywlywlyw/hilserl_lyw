@@ -16,7 +16,7 @@ devices = jax.local_devices()
 sharding = jax.sharding.PositionalSharding(devices)
 FLAGS = flags.FLAGS
 flags.DEFINE_string("exp_name", "blockassembly", "Name of experiment corresponding to folder.")
-flags.DEFINE_integer("successes_needed", 20, "Number of successful transistions to collect.")
+flags.DEFINE_integer("successes_needed", 1, "Number of successful transistions to collect.")
 flags.DEFINE_string("checkpoint_path", "/home/admin01/lyw_2/hil-serl_original/checkpoints/20251218_160448", "Path to save checkpoints.")#"/home/admin01/lyw_2/hil-serl_original/checkpoints/"+time.strftime("%Y%m%d_%H%M%S", time.localtime())
 flags.DEFINE_integer("eval_checkpoint_step", 0 ,"Step to evaluate the checkpoint.")
 flags.DEFINE_integer("seed", 42, "Random seed.")
@@ -147,17 +147,24 @@ def main(_):
     
         
 if __name__ == "__main__":
-    app.run(main)
+    # app.run(main)
     
-    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35.pkl", "rb") as f:
+    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-05_22-33-09.pkl", "rb") as f:
     #     data_list = pkl.load(f)
-    #     print(data_list[0]["observations"]["state"].shape)
-    #     # import cv2
-    #     # import matplotlib.pyplot as plt
-    #     # img_rgb = cv2.cvtColor(data[0]["observations"]["images"]["shelf"].astype(np.uint8), cv2.COLOR_BGR2RGB)
-    #     # plt.imshow(img_rgb)
-    #     # plt.axis('off')
-    #     # plt.show()
+    #     print(data_list[-1]["observations"]["state"][0][6:])
+        # print(data_list[0]["observations"]["state"].shape)
+        # for data in data_list:
+        #     print(data["observations"]["state"][0][6:])
+        #     print("----------------------")
+        #     import cv2
+        #     import matplotlib.pyplot as plt
+        #     print(data["observations"]["shelf"][0].shape)
+        #     img_rgb = cv2.cvtColor(data["observations"]["shelf"][0].astype(np.uint8), cv2.COLOR_BGR2RGB)
+        #     # plt.imshow(img_rgb)
+        #     # plt.axis('off')
+        #     # plt.show()
+        #     cv2.imshow("img", img_rgb)
+        #     cv2.waitKey(0)
     # #     final_list = []
     # #     for data in data_list:
     # #         # 将原始数据结构转换为扁平结构
@@ -212,14 +219,26 @@ if __name__ == "__main__":
     #     with open(f"/home/admin01/lyw_2/hil-serl_original/checkpoints/20251224_1416/demo_buffer/transitions_{cnt}.pkl", "rb") as f:
     #         data_list = pkl.load(f)
     #         print(len(data_list))
-    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35_fixed.pkl", "rb") as f:
+    with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-06_22-31-58_3dof.pkl", "rb") as f:
+        new_data_list = pkl.load(f)
+        for i in range(len(new_data_list)-1):
+            print(np.linalg.norm(new_data_list[i]["observations"]["state"][0][6:9] - new_data_list[i+1]["observations"]["state"][0][6:9]))
+    # with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-07_14-04-33.pkl", "rb") as f:
     #     data_list = pkl.load(f)
-    #     for data in data_list:
-    #         if data["observations"]["state"].shape[1] != 19:
-    #             print(data["observations"]["state"].shape)
+    #     cnt = 0
+    #     for i in range(len(data_list)):
+    #         cnt += 1
+    #         if data_list[-2-i]["rewards"] == 1:
+    #             break
+    #     data_list[-cnt:] = new_data_list
+    #     with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-07_14-04-33_new.pkl", "wb") as f:
+    #         pkl.dump(data_list, f)
+    #     # for data in data_list:
+    #     #     if data["observations"]["state"].shape[1] != 19:
+    #     #         print(data["observations"]["state"].shape)
     #     final_list = []
     #     for data in data_list:
-    #         data["observations"]["state"] = data["observations"]["state"][:19]
+    #         data["actions"] = data["actions"][:3]
     #         final_list.append(data)
-    #     with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2025-12-25_00-45-35_fixed.pkl", "wb") as f:
+    #     with open("/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-06_22-31-58_3dof.pkl", "wb") as f:
     #         pkl.dump(final_list, f)

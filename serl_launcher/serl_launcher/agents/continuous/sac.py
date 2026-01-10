@@ -197,23 +197,23 @@ class SACAgent(flax.struct.PyTreeNode):
         chex.assert_equal_shape([predicted_qs, target_qs])
         critic_loss = jnp.mean((predicted_qs - target_qs) ** 2)
 
-        real_predicted_qs = self.forward_critic(
-            batch["observations"], self.forward_policy(batch["observations"], rng=rng, train=False).sample(seed=rng), rng=rng, train=False
-        )
+        # real_predicted_qs = self.forward_critic(
+        #     batch["observations"], self.forward_policy(batch["observations"], rng=rng, train=False).sample(seed=rng), rng=rng, train=False
+        # )
         info = {
             "critic_loss": critic_loss,
             "predicted_qs": jnp.mean(predicted_qs),
             "target_qs": jnp.mean(target_qs),
             "rewards": batch["rewards"].mean(),
-            "std_td_error" : jnp.std(predicted_qs - target_qs),
-            "mean_td_error" : jnp.mean(jnp.abs(predicted_qs - target_qs)),
-            "max_td_error" : jnp.max(jnp.abs(predicted_qs - target_qs)),
-            "ensemble_std": jnp.mean(jnp.std(predicted_qs, axis=0)),
-            "ensemble_gap": jnp.mean(jnp.abs(predicted_qs.max(axis=0) - predicted_qs.min(axis=0))),
-            "bootstrap_ratio": jnp.mean(jnp.where(target_q != 0, batch["rewards"] / target_q, batch["rewards"] / (target_q + 0.001))),
-            "demo_Q_delta": jnp.mean(predicted_qs[:, batch_size//2:] - real_predicted_qs[:, batch_size//2:]),
-            "mean_target_next_min_q": jnp.mean(target_next_min_q),
-            "std_target_next_min_q": jnp.std(target_next_min_q),
+            # "std_td_error" : jnp.std(predicted_qs - target_qs),
+            # "mean_td_error" : jnp.mean(jnp.abs(predicted_qs - target_qs)),
+            # "max_td_error" : jnp.max(jnp.abs(predicted_qs - target_qs)),
+            # "ensemble_std": jnp.mean(jnp.std(predicted_qs, axis=0)),
+            # "ensemble_gap": jnp.mean(jnp.abs(predicted_qs.max(axis=0) - predicted_qs.min(axis=0))),
+            # "bootstrap_ratio": jnp.mean(jnp.where(target_q != 0, batch["rewards"] / target_q, batch["rewards"] / (target_q + 0.001))),
+            # "demo_Q_delta": jnp.mean(predicted_qs[:, batch_size//2:] - real_predicted_qs[:, batch_size//2:]),
+            # "mean_target_next_min_q": jnp.mean(target_next_min_q),
+            # "std_target_next_min_q": jnp.std(target_next_min_q),
         }
 
         return critic_loss, info
@@ -244,9 +244,9 @@ class SACAgent(flax.struct.PyTreeNode):
             "actor_loss": actor_loss,
             "temperature": temperature,
             "entropy": -log_probs.mean(),
-            "mean_std": action_distributions.distribution.stddev().mean(),
-            "pred_qs": predicted_q.mean(),
-            "temperature_log_probs_mean": (temperature * log_probs).mean(),
+            # "mean_std": action_distributions.distribution.stddev().mean(),
+            # "pred_qs": predicted_q.mean(),
+            # "temperature_log_probs_mean": (temperature * log_probs).mean(),
         }
 
         return actor_loss, info

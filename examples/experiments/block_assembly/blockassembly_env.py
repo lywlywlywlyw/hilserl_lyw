@@ -60,6 +60,7 @@ class BlockAssemblyEnv(gym.Env):
     def __init__(self, fake_env, control_double_arm=False, evaluate=0, save_video=False, classifer=False, offline_train=False):
         # contrl double arm
         self.control_double_arm = control_double_arm
+        self.control_single_xyz = True
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         # self.observation_space = gym.spaces.Box(low=-5, high=5, shape=(36,), dtype=np.float32)
         if self.control_double_arm:
@@ -123,7 +124,10 @@ class BlockAssemblyEnv(gym.Env):
                     ),
                 }
             )
-            self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
+            if self.control_single_xyz:
+                self.action_space = gym.spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)
+            else:
+                self.action_space = gym.spaces.Box(low=-1, high=1, shape=(6,), dtype=np.float32)
         self.agent = None
         self.rng = None
         self.queue = np.zeros(50,)
@@ -172,11 +176,11 @@ class BlockAssemblyEnv(gym.Env):
             self.init_baseur2tcp_pos0 = np.array([-0.2722, -0.6226,  0.1909])
             self.init_baseur2tcp_quat0 = np.array([ 0.0239, -0.8168,  0.4995,  0.2878])
         else:
-            self.init_dof_pos0 = np.array([0.8021015524864197, -0.9664557615863245, 1.602889060974121, 0.36605024337768555, 2.1278767585754395, 2.7343616485595703])
+            self.init_dof_pos0 = np.array([0.8021015524864197, -0.9664557615863245, 1.602889060974121, 0.36605024337768555, 2.1278767585754395, 2.575887441635132])
             self.init_dof_pos1 = np.array([-0.836181942616598, -2.1636832396136683, -1.6823161284076136, -3.378989044819967, -2.131158177052633, 0.19614507257938385])
             # self.init_hand_pos = np.array([5.317746399668977e-06, 1.0040700435638428, 0.9746702313423157, 1.01011061668396, 0.10482560843229294, 1.1795626878738403])
             self.init_baseur2tcp_pos0 = np.array([-0.3110, -0.4150,  0.0962])
-            self.init_baseur2tcp_quat0 = np.array([-0.2373, -0.8941,  0.0788,  0.3716])
+            self.init_baseur2tcp_quat0 = np.array([-0.1658, -0.9101,  0.0492,  0.3767])
             if self.control_double_arm:
                 self.init_dof_pos1 = np.array([-0.9524505774127405, -2.010629955922262, -1.7300599257098597, -3.549246613179342, -2.1965721289264124, 0.08016323298215866])
                 self.init_baseur2tcp_pos1 = np.array([ 0.2174, -0.4106,  0.1455])
@@ -187,11 +191,20 @@ class BlockAssemblyEnv(gym.Env):
             self.init_world2tcp_pos1 = self.quat_apply(self.l_world2baseur_rot, torch.from_numpy(self.init_baseur2tcp_pos1).float().to(self.device)) + self.l_world2baseur_pos
             self.init_world2tcp_quat1 = self.quat_mul(self.l_world2baseur_rot, torch.from_numpy(self.init_baseur2tcp_quat1).float().to(self.device))
         # 随机化和范围参数
-        self.random_pos_range = 0.03
-        self.random_rot_range = 0.175
+        if self.control_single_xyz:
+            self.random_pos_range = 0.03
+            self.random_rot_range = 0
+        else:
+            self.random_pos_range = 0.03
+            self.random_rot_range = 0.175
         # 世界坐标系下的安全范围（y轴向右）
         self.safety_box_size_min0 = np.array([-self.random_pos_range-0.01, -self.random_pos_range-0.01, -0.1-0.03, -self.random_rot_range-0.05, -self.random_rot_range-0.05, -self.random_rot_range-0.05])
         self.safety_box_size_max0 = np.array([self.random_pos_range+0.01, self.random_pos_range+0.01, 0.01, self.random_rot_range+0.05, self.random_rot_range+0.05, self.random_rot_range+0.05])
+        # self.random_pos_range = 0.03
+        # self.random_rot_range = 0
+        # 世界坐标系下的安全范围（y轴向右）
+        # self.safety_box_size_min0 = np.array([-self.random_pos_range-0.01, -self.random_pos_range-0.01, -0.1-0.03, -self.random_rot_range, -self.random_rot_range, -self.random_rot_range])
+        # self.safety_box_size_max0 = np.array([self.random_pos_range+0.01, self.random_pos_range+0.01, 0.01, self.random_rot_range, self.random_rot_range, self.random_rot_range])
         if self.control_double_arm:
             self.safety_box_size_min1 = np.array([-self.random_pos_range-0.01, -self.random_pos_range-0.01, -0.01, -self.random_rot_range-0.05, -self.random_rot_range-0.05, -self.random_rot_range-0.05])
             self.safety_box_size_max1 = np.array([self.random_pos_range+0.01, self.random_pos_range+0.01, 0.1+0.03, self.random_rot_range+0.05, self.random_rot_range+0.05, self.random_rot_range+0.05])
@@ -287,7 +300,36 @@ class BlockAssemblyEnv(gym.Env):
         self.last_x_force_positive = 0
         self.last_x_force_negative = 0
         self.last_left_hand_force = np.array([0, 0, 0, 0, 0, 0])
-        
+        # 自动化intervene
+        # self.eva_list = [[-0.03, 0.03], [-0.03, -0.03], [0.03, 0.03], [0.03, -0.03]]
+        # self.eva_num = 0
+        self.auto_intervene = False
+        if self.auto_intervene:
+            self.slide_window_mode = True
+            if self.slide_window_mode:
+                self.force_cond = False
+                self.collided_idx = -1
+                self.slide_window = [i for i in range(20)]
+                self.intervened_slide_idx = -1
+            else:
+                self.deviation_cnt = 0
+                self.minidist_point_index_list = [-1 for i in range(25)]
+                self.intervene_flag_list = [0, 0, 0]
+                self.intervene_min_idx = -1
+            with open('/home/admin01/lyw_2/hil-serl_original/data/demos/demo_2026-01-07_14-04-33_new.pkl', 'rb') as f:
+                self.demo_data = pickle.load(f)
+                cnt = 0
+                for i in range(len(self.demo_data)):
+                    cnt += 1
+                    if self.demo_data[-2-i]["rewards"] == 1:
+                        break
+                demo_tcp_list = []
+                demo_data_list = self.demo_data[-cnt:]
+                for data in demo_data_list:
+                    demo_tcp_list.append(data['observations']['state'][0][6:])
+                self.demo_tcp_list = np.array(demo_tcp_list)
+            self.fix_initial_state_demo_tcp_list = copy.deepcopy(self.demo_tcp_list)
+           
     # def on_press(self, key):
     #     try:
     #         if isinstance(key, keyboard.Key):
@@ -297,6 +339,24 @@ class BlockAssemblyEnv(gym.Env):
     #                 self.success_flag = 1
     #     except AttributeError:
     #         pass
+    def select_minidist_point(self, tcp_pose, input_curr_demo_tcp_list):
+        curr_demo_tcp_list = copy.deepcopy(input_curr_demo_tcp_list)
+        demo_tcp_pos = torch.from_numpy(curr_demo_tcp_list[:, :3]).to(self.device)
+        demo_tcp_quat = torch.from_numpy(curr_demo_tcp_list[:, 3:]).to(self.device)
+        tcp_pose = torch.from_numpy(tcp_pose).unsqueeze(0).repeat(demo_tcp_pos.shape[0], 1).to(self.device)
+        # rot_dist
+        quat_diff = self.quat_mul(demo_tcp_quat, self.quat_conjugate(tcp_pose[:, 3:]))
+        rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[:, 0:3], p=2, dim=-1), max=1.0))
+
+        # trans_dist
+        # demo_world2tcp_pos = self.quat_apply(self.r_world2baseur_rot, demo_tcp_pos) + self.r_world2baseur_pos
+        # tcp_world2tcp_pos = self.quat_apply(self.r_world2baseur_rot, tcp_pose[:, :3]) + self.r_world2baseur_pos
+        # trans_dist = torch.norm(demo_world2tcp_pos[:, :2] - tcp_world2tcp_pos[:, :2], p=2, dim=-1)
+        # select_z_dist = torch.abs(demo_world2tcp_pos[:, 2] - tcp_world2tcp_pos[:, 2])
+        trans_dist = torch.norm(demo_tcp_pos - tcp_pose[:, :3], p=2, dim=-1)
+        min_idx = torch.argmin(trans_dist)
+        
+        return trans_dist[min_idx], rot_dist[min_idx], min_idx
 
     def init_camera(self, serial_number):
         pipeline = rs.pipeline()
@@ -374,7 +434,7 @@ class BlockAssemblyEnv(gym.Env):
         var = ((b - a) ** 2) / 12.0
         return mean, var
 
-    def action(self, action: np.ndarray) -> np.ndarray:
+    def action(self, action: np.ndarray, initial_tcp_pose, initial_tcp_force) -> np.ndarray:
         """
         Input:
         - action: policy action
@@ -382,15 +442,133 @@ class BlockAssemblyEnv(gym.Env):
         - action: spacemouse action if nonezero; else, policy action
         """
         expert_a, buttons = self.expert.get_action()
-        
         intervened = False
         
-        if np.linalg.norm(expert_a) > 0.1:#0.001:
-            intervened = True
+        
+        if self.auto_intervene:
+            if self.slide_window_mode:
+                trans_dist, rot_dist, min_idx = self.select_minidist_point(initial_tcp_pose, self.demo_tcp_list[np.array(self.slide_window)])
+                self.force_cond = (abs(initial_tcp_force[0]) > 50) or (abs(initial_tcp_force[1]) > 50) or (abs(initial_tcp_force[2]) > 50)
+                print("@@@@@@@@@@L:", self.force_cond)
+                print("$$$$$$$$$$$$$:", initial_tcp_force)
+                if trans_dist > 0.03:
+                    self.intervened_slide_idx = self.slide_window[min_idx]
+                if self.force_cond:
+                    self.intervened_slide_idx = max(0, self.slide_window[min_idx] - 5)
+                    self.collided_idx = copy.deepcopy(self.intervened_slide_idx)
+                if (self.collided_idx != -1):
+                    target_point = self.demo_tcp_list[self.collided_idx]
+                    if np.linalg.norm(target_point[:3] - initial_tcp_pose[:3]) < 0.005:
+                        self.intervened_slide_idx = copy.deepcopy(self.collided_idx)
+                        self.collided_idx = -1
+                if (self.collided_idx == -1) and (self.intervened_slide_idx != -1):
+                    target_point = self.demo_tcp_list[min(self.intervened_slide_idx+10, len(self.demo_tcp_list)-1)]
+                    if np.linalg.norm(target_point[:3] - initial_tcp_pose[:3]) < 0.005:
+                        self.intervened_slide_idx = -1
+                if (self.intervened_slide_idx != -1) or (self.collided_idx != -1):
+                    curr_baseur2ee_pose0 = np.array(self.cal_fk_real_robot("right"))
+                    curr_baseur2ee_pos0 = curr_baseur2ee_pose0[:3].astype(np.float32)
+                    curr_baseur2ee_rot0 = R.from_rotvec(curr_baseur2ee_pose0[3:6]).as_quat().astype(np.float32)
+                    expert_a = self.ik_solver(target_point, curr_baseur2ee_pos0, curr_baseur2ee_rot0, self.action_pos_range_value, self.action_rot_range_value) 
+                    intervened = True
+                
+                # if (self.intervened_slide_idx != -1) or (self.collided_idx != -1):
+                #     if self.collided_idx != -1:
+                #         target_point = self.demo_tcp_list[self.collided_idx]
+                #     else:
+                #         target_point = self.demo_tcp_list[min(self.intervened_slide_idx+10, len(self.demo_tcp_list)-1)]
+                #     print("%%%:", target_point[:3])
+                #     print("%%%@:", initial_tcp_pose[:3])
+                #     print("^^^:", np.linalg.norm(target_point[:3] - initial_tcp_pose[:3]))
+                #     if np.linalg.norm(target_point[:3] - initial_tcp_pose[:3]) < 0.005:
+                #         print("ddddddddddddddddddddddbbbbbbbbbbbbbbbbbbbbbbbbbbbb!!!!!!!!!!!!")
+                #         if self.collided_idx != -1:
+                #             self.intervened_slide_idx = copy.deepcopy(self.collided_idx)
+                            
+                #         else:
+                #             self.intervened_slide_idx = -1
+                #         self.collided_idx = -1
+                        
+                #     else:
+                #         curr_baseur2ee_pose0 = np.array(self.cal_fk_real_robot("right"))
+                #         curr_baseur2ee_pos0 = curr_baseur2ee_pose0[:3].astype(np.float32)
+                #         curr_baseur2ee_rot0 = R.from_rotvec(curr_baseur2ee_pose0[3:6]).as_quat().astype(np.float32)
+                #         expert_a = self.ik_solver(target_point, curr_baseur2ee_pos0, curr_baseur2ee_rot0) 
+                #         intervened = True
+                print("!!!!!!!!!!!!!!!!!!!!!:", self.intervened_slide_idx)   
+                print("!!!!!!!!!!!!!!!!!!!!!:", self.collided_idx)   
+
+            else:
+                # 均是baseur
+                trans_dist, rot_dist, min_idx = self.select_minidist_point(initial_tcp_pose, self.demo_tcp_list)
+                
+                print("trans_dist:", trans_dist, "rot_dist:", rot_dist)
+                print("mini_list:", self.minidist_point_index_list)
+                # if (trans_dist > 0.02)|(rot_dist > 0.2):
+                #     self.deviation_cnt += 1
+                cond1 = False#(initial_world2tcp_pos[2] < (separate_world2tcp_pos[2] + 0.01))
+                cond2 = (trans_dist > 0.02)#(self.deviation_cnt == 5)
+                cond3 = ((self.intervene_flag_list[0] > 0) and (self.intervene_flag_list[1]&self.intervene_flag_list[2] == 0))
+                cond4 = (self.minidist_point_index_list[-1] < self.minidist_point_index_list[-20])
+                cond5 = ((self.minidist_point_index_list[-20] != -1) and (abs(self.minidist_point_index_list[-1] - self.minidist_point_index_list[-20]) <= 3))
+                cond6 = (abs(initial_tcp_force[0]) > 80) or (abs(initial_tcp_force[1]) > 80) or (abs(initial_tcp_force[2]) > 80)
+                print("!!!!!!!!!!!!!!!!!!!!!!!!")
+                print("initial_tcp_force:", initial_tcp_force)
+                print("cond1:", cond1, "cond2:", cond2, "cond3:", cond3, "cond4:", cond4, "cond5:", cond5, "cond6:", cond6)
+                
+                if cond1 or cond2 or cond3 or cond4 or cond5 or cond6:
+                # if (initial_world2tcp_pos[2] < (separate_world2tcp_pos[2] + 0.01)) or (np.linalg.norm(expert_a) > 0.1) or ((self.intervene_flag_list[0] > 0) and (self.intervene_flag_list[1]&self.intervene_flag_list[2] == 0)):
+                    # if (self.deviation_cnt == 5) or ((self.deviation_cnt > 0) and (trans_dist <= 0.02) and (rot_dist <= 0.2)):
+                    #     self.deviation_cnt = 0
+                    if self.intervene_flag_list[0] == 0:
+                        self.intervene_min_idx = min_idx
+                        if cond6:
+                            self.intervene_min_idx = max(0, min_idx-5)
+                        self.intervene_flag_list[0] = 1
+                        if cond4:
+                            self.intervene_flag_list[0] = 2   
+                        if cond6:
+                            self.intervene_flag_list[0] = 3                                                          
+                    if self.intervene_flag_list[1] == 0:
+                        target_point = self.demo_tcp_list[self.intervene_min_idx]
+                        if np.linalg.norm(target_point[:3] - initial_tcp_pose[:3]) < 0.005:
+                            self.intervene_flag_list[1] = 1
+                    if self.intervene_flag_list[1] == 1:
+                        if (self.intervene_flag_list[0] == 2) or (self.intervene_flag_list[0] == 3):
+                            target_point = self.demo_tcp_list[min(self.intervene_min_idx+20, len(self.demo_tcp_list)-1)]
+                        else:
+                            target_point = self.demo_tcp_list[min(self.intervene_min_idx+10, len(self.demo_tcp_list)-1)]
+                        if np.linalg.norm(target_point[:3] - initial_tcp_pose[:3]) < 0.005:
+                            self.intervene_flag_list[2] = 1
+                    curr_baseur2ee_pose0 = np.array(self.cal_fk_real_robot("right"))
+                    curr_baseur2ee_pos0 = curr_baseur2ee_pose0[:3].astype(np.float32)
+                    curr_baseur2ee_rot0 = R.from_rotvec(curr_baseur2ee_pose0[3:6]).as_quat().astype(np.float32)
+                    expert_a = self.ik_solver(target_point, curr_baseur2ee_pos0, curr_baseur2ee_rot0, self.action_pos_range_value, self.action_rot_range_value)
+                    intervened = True
+                    if self.intervene_flag_list[2] == 1:
+                        self.intervene_flag_list = [0, 0, 0]
+                        if len(self.minidist_point_index_list) == 25:
+                            self.minidist_point_index_list.pop(0)
+                        self.minidist_point_index_list.append(min_idx)
+                        print("min_idx:", min_idx)
+                        intervened = False
+                    # if (initial_world2tcp_pos[2] < (separate_world2tcp_pos[2] + 0.01)):
+                    #     intervened = True
+                    #     expert_a = self.ik_solver(self.demo_tcp_list[min(min_idx+10, len(self.demo_tcp_list)-1)])
+
+                else:
+                    if len(self.minidist_point_index_list) == 25:
+                        self.minidist_point_index_list.pop(0)
+                    self.minidist_point_index_list.append(min_idx)
+                    print("min_idx:", min_idx)
+        else:
+            if np.linalg.norm(expert_a) > 0.1:#0.001:
+                intervened = True
 
         if intervened:
+            if self.control_single_xyz:
+                expert_a = expert_a[:3]
             return expert_a, True, buttons[0], buttons[1]
-
         return action, False, buttons[0], buttons[1]
     
     def safety_box(self, target_world2ee_pos, target_world2ee_quat, init_world2tcp_quat, init_world2tcp_pos, safety_box_size_min, safety_box_size_max, world2baseur_rot, world2baseur_pos):
@@ -410,6 +588,23 @@ class BlockAssemblyEnv(gym.Env):
         clamp_target_baseur2ee_rotvec = R.from_quat(clamp_target_baseur2ee_quat.cpu().numpy()).as_rotvec()
         return clamp_target_baseur2ee_pos, clamp_target_baseur2ee_rotvec
 
+    # 输入numpy
+    def ik_solver(self, target_point, curr_baseur2ee_pos0, curr_baseur2ee_rot0, action_pos_range_value, action_rot_range_value):
+        target_baseur2ee_pos0 = torch.from_numpy(target_point[:3]).float().to(self.device)
+        target_baseur2ee_rot0 = torch.from_numpy(target_point[3:]).float().to(self.device)
+        target_world2ee_pos0 = self.quat_apply(self.r_world2baseur_rot, target_baseur2ee_pos0) + self.r_world2baseur_pos
+        target_world2ee_rot0 = self.quat_mul(self.r_world2baseur_rot, target_baseur2ee_rot0)
+        
+        curr_world2ee_pos0 = self.quat_apply(self.r_world2baseur_rot, torch.from_numpy(curr_baseur2ee_pos0).to(self.device)) + self.r_world2baseur_pos
+        curr_world2ee_rot0 = self.quat_mul(self.r_world2baseur_rot, torch.from_numpy(curr_baseur2ee_rot0).to(self.device))
+        
+        #第一次clamp：将目标位姿和当前位姿的插值除以步长限制在-1~1，保证action是-1~1
+        target_difference_rot = torch.from_numpy(R.from_quat((self.quat_mul(target_world2ee_rot0, self.quat_conjugate(curr_world2ee_rot0))).cpu().numpy()).as_euler("xyz")).to(self.device).float()
+        target_difference_pos = target_world2ee_pos0 - curr_world2ee_pos0
+        clamp_differece_rot = torch.clamp(target_difference_rot/action_rot_range_value, -1*torch.ones_like(target_difference_rot), 1*torch.ones_like(target_difference_rot))
+        clamp_differece_pos = torch.clamp(target_difference_pos/action_pos_range_value, -1*torch.ones_like(target_difference_pos), 1*torch.ones_like(target_difference_pos))
+        return np.concatenate([clamp_differece_pos.cpu().numpy(), clamp_differece_rot.cpu().numpy()])
+        
     def step(self, action):
         
         print("--------------------------step:", self.steps)
@@ -425,9 +620,7 @@ class BlockAssemblyEnv(gym.Env):
 
         info = {}
         bad_data = False
-        action, is_intervened, button0, button1 = self.action(action)
-        # if is_intervened:
-        #     action = np.concatenate([[0, 0, 0, 0, 0, 0], action])
+        action, is_intervened, button0, button1 = self.action(action, initial_tcp_pose, jax.device_get(state_observation["r_force"]))
         success, failure = button0, button1
         if len(self.success_flag) == 10:
             self.success_flag.pop(0)
@@ -521,10 +714,13 @@ class BlockAssemblyEnv(gym.Env):
             initial_world2ee_pos0 = self.quat_apply(self.r_world2baseur_rot, initial_baseur2ee_pos0) + self.r_world2baseur_pos
             initial_world2ee_quat0 = self.quat_mul(self.r_world2baseur_rot, initial_baseur2ee_quat0)
             target_world2ee_pos0 = initial_world2ee_pos0 + action[:3]*self.action_pos_range_value
-            world2ee_euler_err0 = (action[3:]*self.action_rot_range_value).cpu().numpy()#self.scale(action[3:6], self.action_rot_range_lower, self.action_rot_range_upper).cpu().numpy()
-            world2ee_quat_err0 = torch.from_numpy(R.from_euler('xyz', world2ee_euler_err0).as_quat()).float().to(self.device)
-            world2ee_quat_dt0 = self.quat_mul(self.quat_mul(self.quat_conjugate(initial_world2ee_quat0), world2ee_quat_err0), initial_world2ee_quat0)
-            target_world2ee_quat0 = self.quat_mul(initial_world2ee_quat0, world2ee_quat_dt0)
+            if self.control_single_xyz:
+                target_world2ee_quat0 = initial_world2ee_quat0.clone()
+            else:
+                world2ee_euler_err0 = (action[3:]*self.action_rot_range_value).cpu().numpy()#self.scale(action[3:6], self.action_rot_range_lower, self.action_rot_range_upper).cpu().numpy()
+                world2ee_quat_err0 = torch.from_numpy(R.from_euler('xyz', world2ee_euler_err0).as_quat()).float().to(self.device)
+                world2ee_quat_dt0 = self.quat_mul(self.quat_mul(self.quat_conjugate(initial_world2ee_quat0), world2ee_quat_err0), initial_world2ee_quat0)
+                target_world2ee_quat0 = self.quat_mul(initial_world2ee_quat0, world2ee_quat_dt0)
             
             clamp_target_baseur2ee_pos0, clamp_target_baseur2ee_rotvec0 = self.safety_box(target_world2ee_pos0, target_world2ee_quat0, self.init_world2tcp_quat0, self.init_world2tcp_pos0, self.safety_box_size_min0, self.safety_box_size_max0, self.r_world2baseur_rot, self.r_world2baseur_pos)
             arm_pos = self.cal_ik_real_robot(clamp_target_baseur2ee_pos0.cpu().numpy(), clamp_target_baseur2ee_rotvec0, self.rtde_r.getActualQ())#self.rtde_c.getInverseKinematics(np.concatenate([clamp_target_baseur2ee_pos0.cpu().numpy(), baseur2ee_rot0]))
@@ -558,18 +754,28 @@ class BlockAssemblyEnv(gym.Env):
         
         self.steps += 1
         self.total_steps += 1
+        if self.auto_intervene:
+            if self.slide_window_mode:
+                if (self.intervened_slide_idx == -1) and (self.collided_idx == -1):
+                    self.slide_window.pop(0)
+                    self.slide_window.append(min(self.slide_window[-1]+1, len(self.demo_tcp_list)-1))
         if (len(self.success_flag) >= 2) and (self.success_flag[-1] == 1) and (self.success_flag[-2] == 1):
             reward = 1
         else:
             reward = 0
-
+        # if self.auto_intervene:
+        success_tcp_pos = np.array([-0.3818, -0.4092,  0.0219])#self.demo_tcp_list[-1][:3]
+        next_tcp_pos = jax.device_get(next_state_observation["tcp_pose"])[:3]
+        delta_pos = np.linalg.norm(next_tcp_pos - success_tcp_pos)
+        if delta_pos < 0.01:
+            reward = 1
         if (len(self.failure_flag) >= 2) and (self.failure_flag[-1] == 1) and (self.failure_flag[-2] == 1):
             self.stop_flag = True
         
         if self.classifer:
             done = (self.steps == self.max_episode_steps)
         else:
-            done = (self.steps == self.max_episode_steps)|(reward == 1)
+            done = (self.steps == self.max_episode_steps)|(reward == 1)|(self.stop_flag == True)
         
         self.episode_reward += reward
         info["bad_data"] = bad_data
@@ -726,11 +932,64 @@ class BlockAssemblyEnv(gym.Env):
 
         return copy.deepcopy(dict(images=images, state=state_observation)), state_observation#, jax.device_get(state_observation["r_force"]), jax.device_get(state_observation["tcp_vel"])
 
+    # 输入：随机化的初始目标位姿
+    def augment_demo(self, target_baseur2tcp_pos, target_baseur2tcp_quat):
+        # input:numpy
+        tcp_pose = np.concatenate([target_baseur2tcp_pos, target_baseur2tcp_quat])
+        _, _, min_idx = self.select_minidist_point(tcp_pose, self.fix_initial_state_demo_tcp_list)
+        aug_trajs = []
+        rot_dist = 100
+        trans_dist = 100
+        curr_baseur2tcp_pos = copy.deepcopy(target_baseur2tcp_pos)
+        curr_baseur2tcp_quat = copy.deepcopy(target_baseur2tcp_quat)
+        aug_trajs.append(np.concatenate([curr_baseur2tcp_pos, curr_baseur2tcp_quat]))
+        mini_demo_point = self.fix_initial_state_demo_tcp_list[min_idx]
+        while (rot_dist > 0.1) or (trans_dist > 0.001):
+            action = self.ik_solver(mini_demo_point, curr_baseur2tcp_pos, curr_baseur2tcp_quat, 0.00173, self.action_rot_range_value)
+            if self.control_single_xyz:
+                action = action[:3]
+            action = np.clip(action, self.action_space.low, self.action_space.high)
+            action = torch.from_numpy(action).float().to(self.device)
+            initial_tcp_pose = np.concatenate([curr_baseur2tcp_pos, curr_baseur2tcp_quat])
+
+            initial_baseur2ee_pos0 = torch.from_numpy(initial_tcp_pose[:3].copy()).to(self.device)
+            initial_baseur2ee_quat0 = torch.from_numpy(initial_tcp_pose[3:].copy()).to(self.device)
+            initial_world2ee_pos0 = self.quat_apply(self.r_world2baseur_rot, initial_baseur2ee_pos0) + self.r_world2baseur_pos
+            initial_world2ee_quat0 = self.quat_mul(self.r_world2baseur_rot, initial_baseur2ee_quat0)
+            target_world2ee_pos0 = initial_world2ee_pos0 + action[:3]*0.00173#self.action_pos_range_value
+            print("delta_world:", torch.norm(target_world2ee_pos0 - initial_world2ee_pos0, p=2, dim=-1).item())
+            if self.control_single_xyz:
+                target_world2ee_quat0 = initial_world2ee_quat0.clone()
+            else:
+                world2ee_euler_err0 = (action[3:]*self.action_rot_range_value).cpu().numpy()#self.scale(action[3:6], self.action_rot_range_lower, self.action_rot_range_upper).cpu().numpy()
+                world2ee_quat_err0 = torch.from_numpy(R.from_euler('xyz', world2ee_euler_err0).as_quat()).float().to(self.device)
+                world2ee_quat_dt0 = self.quat_mul(self.quat_mul(self.quat_conjugate(initial_world2ee_quat0), world2ee_quat_err0), initial_world2ee_quat0)
+                target_world2ee_quat0 = self.quat_mul(initial_world2ee_quat0, world2ee_quat_dt0)
+            
+            clamp_target_baseur2ee_pos0, clamp_target_baseur2ee_rotvec0 = self.safety_box(target_world2ee_pos0, target_world2ee_quat0, self.init_world2tcp_quat0, self.init_world2tcp_pos0, self.safety_box_size_min0, self.safety_box_size_max0, self.r_world2baseur_rot, self.r_world2baseur_pos)
+            print("delta_baseur:", torch.norm(clamp_target_baseur2ee_pos0 - initial_baseur2ee_pos0, p=2, dim=-1).item())
+            curr_baseur2tcp_pos = clamp_target_baseur2ee_pos0.cpu().numpy()
+            curr_baseur2tcp_quat = R.from_rotvec(clamp_target_baseur2ee_rotvec0).as_quat().astype(np.float32)
+            aug_trajs.append(np.concatenate([curr_baseur2tcp_pos, curr_baseur2tcp_quat]))
+            # rot_dist
+            quat_diff = self.quat_mul(torch.from_numpy(curr_baseur2tcp_quat), self.quat_conjugate(torch.from_numpy(mini_demo_point[3:])))
+            rot_dist = 2.0 * torch.asin(torch.clamp(torch.norm(quat_diff[0:3], p=2, dim=-1), max=1.0))
+            # trans_dist
+            trans_dist = np.linalg.norm(curr_baseur2tcp_pos - mini_demo_point[:3])
+            print("action:", action)
+            print("rot_dist:", rot_dist.item(), "trans_dist:", trans_dist)
+            print("dist:", np.linalg.norm(aug_trajs[-1][:3] - aug_trajs[-2][:3]))
+        for i in range(min_idx+1, len(self.fix_initial_state_demo_tcp_list)):
+            aug_trajs.append(self.fix_initial_state_demo_tcp_list[i])
+        print("min_idx:", min_idx)
+        return np.array(aug_trajs)
+
     def reset_within_certain_range(self, init_world2tcp_quat, init_world2tcp_pos, world2baseur_rot, world2baseur_pos, rtde_r, rtde_c):
         random_rot_min = 0
         random_rot_max = self.random_rot_range
         random_pos_min = 0
         random_pos_max = self.random_pos_range
+
         if self.sequence_random_reset:
             if (self.intervene_ep_record_list[-5:] == [0, 0, 0, 0, 0]) and (self.success_ep_record_list[-5:] == [1, 1, 1, 1, 1]):
                 self.sequence_random_reset_index = min(4, self.sequence_random_reset_index + 1)
@@ -739,7 +998,6 @@ class BlockAssemblyEnv(gym.Env):
             random_pos_min = self.random_pos_min_list[choice]
             random_rot_max = self.random_rot_max_list[choice]
             random_pos_max = self.random_pos_max_list[choice]
-        
         while True:
             # random_angle = np.random.uniform(low=-self.random_rot_range, high=self.random_rot_range, size=3)
             # 幅值范围 [min, max]
@@ -768,6 +1026,9 @@ class BlockAssemblyEnv(gym.Env):
 
             tcp02tcp1_pos = pos_mag * pos_sign
             tcp02tcp1_pos[2] = 0 # 在world坐标系下的z方向上不动，在xy平面上动
+            # tcp02tcp1_pos[0] = self.eva_list[self.eva_num][0] # 在world坐标系下的z方向上不动，在xy平面上动
+            # tcp02tcp1_pos[1] =  self.eva_list[self.eva_num][1]# 在world坐标系下的z方向上不动，在xy平面上动
+            # self.eva_num = (self.eva_num + 1) % 4
 
             target_world2tcp_pos = (init_world2tcp_pos + tcp02tcp1_pos)
             target_world2tcp_quat = (self.quat_mul(init_world2tcp_quat, tcp02tcp1_quat_dt))
@@ -784,6 +1045,9 @@ class BlockAssemblyEnv(gym.Env):
                 print("current_dof_pos0:", rtde_r.getActualQ())
                 print("随机化初始化target_dof_pos0:", target_dof_pos0)
                 rtde_c.moveJ(target_dof_pos0, 0.1, 1)
+                # if self.auto_intervene:
+                #     if (self.random_pos_range != 0) or (self.random_rot_range != 0):
+                #         self.demo_tcp_list = self.augment_demo(target_baseur2tcp_pos, target_baseur2tcp_quat)
                 break
 
     def reset(self, **kwargs):
@@ -806,10 +1070,11 @@ class BlockAssemblyEnv(gym.Env):
         obs, _ = self.compute_obs() 
         self.rtde_c.moveJ(self.init_dof_pos0, 0.05, 0.5)
         self.another_rtde_c.moveJ(self.init_dof_pos1, 0.05, 0.5)
+        # input("please move the robot to the start position, press enter to continue...")
+
         self.reset_within_certain_range(self.init_world2tcp_quat0, self.init_world2tcp_pos0, self.r_world2baseur_rot, self.r_world2baseur_pos, self.rtde_r, self.rtde_c)
         if self.control_double_arm:
             self.reset_within_certain_range(self.init_world2tcp_quat1, self.init_world2tcp_pos1, self.l_world2baseur_rot, self.l_world2baseur_pos, self.another_rtde_r, self.another_rtde_c)
-        
         obs, _ = self.compute_obs()
         if self.evaluate != 1:
             wandb.log({'mujoco_reward/reward': self.episode_reward}, step=self.total_steps)
@@ -843,6 +1108,15 @@ class BlockAssemblyEnv(gym.Env):
             self.last_x_force_positive = copy.deepcopy(self.x_force_positive)
             self.last_x_force_negative = copy.deepcopy(self.x_force_negative)
             self.last_left_hand_force = copy.deepcopy(left_hand_force)
+        if self.auto_intervene:
+            if self.slide_window_mode:
+                self.slide_window = [i for i in range(20)]
+                self.intervened_slide_idx = -1
+                self.collided_idx = -1
+            else:
+                self.minidist_point_index_list = [-1 for i in range(25)]
+                self.intervene_flag_list = [0,0,0]
+                self.deviation_cnt = 0
         return obs, {}
 
     
